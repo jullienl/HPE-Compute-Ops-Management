@@ -57,6 +57,7 @@ $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 # None
 
 
+#region authentication
 #----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
 
 $secClientSecret = read-host  "Please enter your HPE GreenLake Client Secret" -AsSecureString
@@ -83,10 +84,11 @@ catch {
 # Capturing API Access Token
 $AccessToken = ($response.Content  | Convertfrom-Json).access_token
 
+#endregion
 
 
-
-#-------------------------------------------------------SERVER requests samples--------------------------------------------------------------------------------
+#region servers
+#-------------------------------------------------------SERVERS requests samples--------------------------------------------------------------------------------
 
 
 # Headers creation
@@ -162,7 +164,7 @@ $ServersList = $response.Content | ConvertFrom-Json
 
 
 # Get a server by ID
-$serverid = $ServersList.items | Where-Object name -eq "HPE-HOL33" | ForEach-Object id
+$serverid = $ServersList.items | where name -eq "HPE-HOL33" | % id
 $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/servers/$serverid" -Method GET -Headers $headers
 $Server = $response.Content | ConvertFrom-Json
 $server
@@ -179,8 +181,44 @@ $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/servers
 $DL360Gen10Plus = ($response.Content | ConvertFrom-Json).items | Where-Object { $_.hardware.model -match "ProLiant DL360 Gen10 Plus" } 
 $DL360Gen10Plus
 
+#endregion
 
-#-------------------------------------------------------FIRMWARE BUNDLES requests samples--------------------------------------------------------------------------------
+
+#region activities
+#-------------------------------------------------------ACTIVITIES requests samples--------------------------------------------------------------------------------
+
+
+# List all activities
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/activities" -Method GET -Headers $headers
+$activities = $response.Content | ConvertFrom-Json
+$activities.items
+
+
+# List last 10 server activities
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/activities?filter=source/type eq 'Server'&limit=10" -Method GET -Headers $headers
+$activities = $response.Content | ConvertFrom-Json
+$activities.items
+$activities.count
+
+
+# List last 10 firmware activities
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/activities?filter=source/type eq 'Firmware'&limit=10" -Method GET -Headers $headers
+$firmwareactivities = $response.Content | ConvertFrom-Json
+$firmwareactivities.items
+$firmwareactivities.count
+
+
+# List required subscriptions activities
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/activities?filter=source/type eq 'Server' and contains(key,'SERVER_ASSIGNED')" -Method GET -Headers $headers
+$subscriptionsactivities = $response.Content | ConvertFrom-Json
+$subscriptionsactivities.items
+$subscriptionsactivities.count
+
+#endregion
+
+
+#region firmware-bundles
+#-------------------------------------------------------FIRMWARE-BUNDLES requests samples--------------------------------------------------------------------------------
 
 
 # List all firmware bundles
@@ -195,7 +233,10 @@ $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/firmwar
 $firmwarebundle = $response.Content | ConvertFrom-Json
 $firmwarebundle
 
+#endregion
 
+
+#region groups
 #-------------------------------------------------------GROUPS requests samples--------------------------------------------------------------------------------
 
 
@@ -269,9 +310,11 @@ $headers["Content-Type"] = "application/merge-patch+json"
 $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/groups/$newcreategroupid" -Method PATCH -Headers $headers -Body $body
 $response.Content | ConvertFrom-Json
 
+#endregion
 
 
-#-------------------------------------------------------JOB TEMPLATES requests samples--------------------------------------------------------------------------------
+#region job-templates
+#-------------------------------------------------------JOB-TEMPLATES requests samples--------------------------------------------------------------------------------
 
 
 # List all job templates
@@ -281,12 +324,15 @@ $jobtemplates.items
 
 
 # Get a  job template
-$jobtemplateid = ($jobtemplates.items | Where-Object name -eq "GroupFirmwareUpdate").id
+$jobtemplateid = ($jobtemplates.items | ? name -eq "GroupFirmwareUpdate").id
 $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/job-templates/$jobtemplateid" -Method GET -Headers $headers
 $jobtemplate = $response.Content | ConvertFrom-Json
 $jobtemplate
 
+#endregion
 
+
+#region jobs
 #-------------------------------------------------------JOBS requests samples--------------------------------------------------------------------------------
 
 
@@ -303,7 +349,7 @@ $job = $response.Content | ConvertFrom-Json
 $job
 
 
-# Create a job
+# Create a job to start a firmware upgrade
 ## This job will upgrade all servers in the group "DL360Gen10plus-Production-Group" with SPP 2022.03.0
 ## Warning: a server reboot can be initiated during the upgrade!
 $jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
@@ -312,10 +358,10 @@ $bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/firmw
 $deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").devices.id 
 
 if ($deviceids.count -eq 1) {
-    $devicesformatted = ConvertTo-Json  @("$deviceids")
+  $devicesformatted = ConvertTo-Json  @("$deviceids")
 }
 else {
-    $devicesformatted = $devices.id | ConvertTo-Json 
+  $devicesformatted = $devices.id | ConvertTo-Json 
 }
 
 $body = @"
@@ -336,28 +382,30 @@ $joburi = ($response.Content | ConvertFrom-Json).resourceUri
 
 ## Wait for the task to start or fail
 do {
-    $status = (Invoke-webrequest "$ConnectivityEndpoint$joburi" -Method GET -Headers $headers).content | ConvertFrom-Json
-    Start-Sleep 5
+  $status = (Invoke-webrequest "$ConnectivityEndpoint$joburi" -Method GET -Headers $headers).content | ConvertFrom-Json
+  Start-Sleep 5
 } until ($status.state -eq "running" -or $status.state -eq "error")
 
 ## Wait for the task to complete
 if ($status.state -eq "error") {
-    "Group firmware update failed! {0}" -f $status.status
+  "Group firmware update failed! {0}" -f $status.status
 }
 else {
-    do {
-        $FWupgradestatus = (((Invoke-webrequest "$ConnectivityEndpoint/ui-doorway/compute/v1/servers/counts/state" -Method GET -Headers $headers).content | convertfrom-json).counts | Get-Member ) | ? name -match "in progress"  | % name
-        $FWupgradestatus
-        $status = (Invoke-webrequest "$ConnectivityEndpoint$joburi" -Method GET -Headers $headers).content | ConvertFrom-Json
-        Start-Sleep 20
-    } until ( $status.state -eq "Error" -or $status.state -eq "complete") 
+  do {
+    $FWupgradestatus = (((Invoke-webrequest "$ConnectivityEndpoint/ui-doorway/compute/v1/servers/counts/state" -Method GET -Headers $headers).content | convertfrom-json).counts | gm ) | ? name -match "in progress"  | % name
+    $FWupgradestatus
+    $status = (Invoke-webrequest "$ConnectivityEndpoint$joburi" -Method GET -Headers $headers).content | ConvertFrom-Json
+    Start-Sleep 20
+  } until ( $status.state -eq "Error" -or $status.state -eq "complete") 
 
-    ## Display status
-    "State: {0} - Status: {1}" -f $status.state, $status.status
+  ## Display status
+  "State: {0} - Status: {1}" -f $status.state, $status.status
 }
 
+#endregion
 
 
+#region schedules
 #-------------------------------------------------------SCHEDULES requests samples--------------------------------------------------------------------------------
 
 
@@ -435,3 +483,4 @@ $headers["Content-Type"] = "application/json"
 $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/schedules" -Method POST -Headers $headers -Body $body
 $response.Content | ConvertFrom-Json
 
+#endregion
