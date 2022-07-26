@@ -84,16 +84,15 @@ catch {
 # Capturing API Access Token
 $AccessToken = ($response.Content  | Convertfrom-Json).access_token
 
+# Headers creation
+$headers = @{} 
+$headers["Authorization"] = "Bearer $AccessToken"
+
 #endregion
 
 
 #region servers
 #-------------------------------------------------------SERVERS requests samples--------------------------------------------------------------------------------
-
-
-# Headers creation
-$headers = @{} 
-$headers["Authorization"] = "Bearer $AccessToken"
 
 
 # Obtain the list of servers in your account
