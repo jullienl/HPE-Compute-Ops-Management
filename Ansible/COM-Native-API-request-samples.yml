@@ -1,0 +1,78 @@
+---
+- hosts: localhost
+  gather_facts: no
+      
+  vars:
+    config: "{{ lookup('file', '{{ playbook_dir }}/com_config.json') | from_json }}"
+  tasks:    
+
+  - name: set variable
+    set_fact:
+      ClientID: "{{ config.ClientID }}"
+      ConnectivityEndpoint: "{{ config.ConnectivityEndpoint }}"
+      ClientSecret: "{{ config.ClientSecret }}"
+      APIversion: "{{ config.APIversion }}"
+
+  - name: Create HPE Compute Ops Management session
+    uri:
+      url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
+      method: POST
+      validate_certs: false
+      body_format: raw
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      body: "grant_type=client_credentials&client_id={{ ClientID }}&client_secret={{ ClientSecret }}"
+    register: login
+
+  # - debug: var=login
+
+  - name: Set variable for the access_token
+    set_fact:
+      access_token: "{{ login.json.access_token }}"
+
+  # - debug: var=access_token
+
+  - name: Collect all servers
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/servers?limit=100"
+      method: GET
+      validate_certs: false
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: servers
+
+  # - name: Display all servers
+  #   debug: var=servers
+
+  - name: Set variable serverID for server HPE-HOL17
+    set_fact:
+      serverID:  "{{ (servers | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='HPE-HOL17'].id"
+
+  # - debug: var=serverID
+
+  - name: Collect server by ID
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/servers/{{ serverID }}"
+      method: GET
+      validate_certs: false
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: server
+
+  - name: Display Server 'HPE-HOL17'
+    debug: var=server
+
+  - name: Collect first 10 servers
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/servers?limit=10"
+      method: GET
+      validate_certs: false
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+      # return_content: yes
+    register: servers
+
+  - name: Display the first 10 servers
+    debug: var=servers
