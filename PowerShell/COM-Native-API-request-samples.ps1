@@ -91,6 +91,7 @@ $headers["Authorization"] = "Bearer $AccessToken"
 #endregion
 
 
+
 #region servers
 #-------------------------------------------------------SERVERS requests samples--------------------------------------------------------------------------------
 
@@ -348,9 +349,10 @@ $job = $response.Content | ConvertFrom-Json
 $job
 
 
-# Create a job to start a firmware upgrade
-## This job will upgrade all servers in the group "DL360Gen10plus-Production-Group" with SPP 2022.03.0
-## Warning: a server reboot can be initiated during the upgrade!
+# Create a job to start a firmware update
+## This job will update all servers in the group "DL360Gen10plus-Production-Group" with SPP 2022.03.0
+## Warning: Any updates other than iLO FW require a server reboot!
+## Note: To set schedule options during updates, you must create a schedule instead of a job
 $jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
 $resourceUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").resourceUri
 $bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq 2022.03.0 | ForEach-Object id
@@ -360,7 +362,7 @@ if ($deviceids.count -eq 1) {
   $devicesformatted = ConvertTo-Json  @("$deviceids")
 }
 else {
-  $devicesformatted = $devices.id | ConvertTo-Json 
+  $devicesformatted = $deviceids | ConvertTo-Json 
 }
 
 $body = @"
@@ -400,6 +402,14 @@ else {
   ## Display status
   "State: {0} - Status: {1}" -f $status.state, $status.status
 }
+
+# Get the update report for the servers in the group after the update is complete.
+foreach ($deviceid in $deviceids) {
+  $report = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json).lastFirmwareUpdate 
+  $report
+
+}
+
 
 #endregion
 
@@ -446,18 +456,33 @@ $response.Content | ConvertFrom-Json
 
 
 # Create a schedule
+## Schedules allow you to run an update with scheduling options
+## Warning: Any updates other than iLO FW require a server reboot!
 $schedulename = "Firmware upgrade for group DL360Gen10plus-Production-Group"
 $description = "Upgrade to SPP 2022.03.0"
-## Start schedule on Oct 20, 2022 at 2am
-$startAt = get-date -year 2022 -Month 10 -Day 20 -Hour 2 -Minute 0  -Format o
+## Start schedule on Sept 1, 2022 at 2am
+$startAt = get-date -year 2022 -Month 09 -Day 1 -Hour 2 -Minute 0  -Format o
 $interval = "null" # Can be P7D for 7 days intervals, P15m, P1M, P1Y
-$associatedResourceUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").resourceUri
+
+
+$jobTemplateid = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").id
+$groupid = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").id
+$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq 2022.03.0 | ForEach-Object id
+$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").devices.id 
+
+if ($deviceids.count -eq 1) {
+  $devicesformatted = ConvertTo-Json  @("$deviceids")
+}
+else {
+  $devicesformatted = $deviceids | ConvertTo-Json 
+}
+
 
 $body = @"
 {
     "name":  "$schedulename",
     "description":  "$description",
-    "associatedResourceUri":  "$associatedResourceUri",
+    "associatedResourceUri":  "/api/compute/v1/groups/$groupid",
     "purpose":  "GROUP_FW_UPDATE",
     "schedule":  {
                      "interval":  $interval,
@@ -465,13 +490,17 @@ $body = @"
                  },
     "operation":  {
                       "type":  "REST",
-                      "timeoutInSec":  20,
                       "method":  "POST",
                       "uri": "/api/compute/v1/jobs",
-                      "query":  {},
-                      "headers":  {},
-                      "body":  null   
-                              
+                      "body":  {
+                        "resourceUri": "/api/compute/v1/groups/$groupid",
+                        "jobTemplateUri": "/api/compute/v1/job-templates/$jobTemplateid",
+                        "data": {
+                          "devices": $devicesformatted,
+                          "parallel": true,
+                          "stopOnFailure": false
+                        }
+                      }                              
                   }
 }
 "@ 
@@ -481,5 +510,21 @@ $headers["Content-Type"] = "application/json"
 # $headers["Idempotency-Key"] = $idempotencyKey 
 $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/schedules" -Method POST -Headers $headers -Body $body
 $response.Content | ConvertFrom-Json
+$scheduleid = ($response.Content | ConvertFrom-Json).id
+
+# Get details about newly created schedule
+((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/schedules/$scheduleid" -Method GET -Headers $headers).Content | ConvertFrom-Json)
+((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/schedules/$scheduleid" -Method GET -Headers $headers).Content | ConvertFrom-Json).operation.body.data
+
+# Delete newly created schedule
+$response = (Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/schedules/$scheduleid" -Method DELETE -Headers $headers) | ConvertFrom-Json
+
+# Get the update report for the servers in the group after the update is complete.
+foreach ($deviceid in $deviceids) {
+  $report = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/v1beta1/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json).lastFirmwareUpdate 
+  $report
+
+}
+
 
 #endregion
