@@ -1,0 +1,209 @@
+---
+- hosts: localhost
+  gather_facts: no
+      
+  vars:
+    config: "{{ lookup('file', '{{ playbook_dir }}/com_config.json') | from_json }}"
+  tasks:    
+
+  - name: set variables
+    set_fact:
+      ClientID: "{{ config.ClientID }}"
+      ConnectivityEndpoint: "{{ config.ConnectivityEndpoint }}"
+      ClientSecret: "{{ config.ClientSecret }}"
+      APIversion: "{{ config.APIversion }}"
+      # Variables to perform the group firmware update 
+      GroupName: "Production-Group"
+      Baseline: "2022.03.0" 
+
+#--------------------------------------COM Authentication-----------------------------------------------
+
+  - name: Create HPE Compute Ops Management session
+    uri:
+      url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
+      method: POST
+      body_format: raw
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      body: "grant_type=client_credentials&client_id={{ ClientID }}&client_secret={{ ClientSecret }}"
+    register: login
+
+  # - debug: var=login
+
+  - name: Set variable access_token for the bearer access_token
+    set_fact:
+      access_token: "{{ login.json.access_token }}"
+
+  # - debug: var=access_token
+
+#--------------------------------------Collecting data-----------------------------------------------
+
+  - name: Retrieve all firmware bundles
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/firmware-bundles"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: firmwarebundles
+
+  # - debug: var=firmwarebundles
+
+  - name: Set variable firmwarebundleID for firmware bundle "{{ Baseline }}"
+    set_fact:
+      firmwarebundleID:  "{{ (firmwarebundles | json_query(query) )[0] }}"     
+    vars:
+      query: "json.items[?releaseVersion=='{{ Baseline }}'].id"
+
+  - debug: var=firmwarebundleID
+
+  - name: Retrieve all groups
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    # Note: you cannot use groups as a variable name as it is a predefined variable name in Ansible
+    # group_names and groups are predefined by Ansible
+    register: allgroups
+
+  # - debug: var=allgroups
+
+  - name: Set variable groupid for {{ GroupName }}
+    set_fact:
+      groupid:  "{{ (allgroups | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='{{ GroupName }}'].id"
+
+  - debug: var=groupid
+
+  - name: Set variable groupuri for {{ GroupName }}
+    set_fact:
+      groupuri:  "{{ (allgroups | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='{{ GroupName }}'].selfUri"
+
+  - debug: var=groupuri
+
+  - name: Retrieve group {{ GroupName }}
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: group
+ 
+  - name: Retrieve all job templates
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/job-templates"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: jobtemplates
+
+  - name: Set variable jobtemplateuri for 'GroupFirmwareUpdate' 
+    # GroupFirmwareUpdate is the template to use to initiate a group firmware update
+    set_fact:
+      jobtemplateuri:  "{{ (jobtemplates | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='GroupFirmwareUpdate'].resourceUri"
+
+  - debug: var=jobtemplateuri
+
+  - name: Set a variable for devices part of group {{ GroupName }} for the following job to start the firmware update
+    set_fact:
+      devices:  "{{ group.json.devices |  map(attribute='id') | list  }}"
+  
+  - debug: var=devices
+
+#--------------------------------------Start the firmware update -----------------------------------------------
+
+  - name: Create a job to start a firmware update
+    # This job will update all servers in the group "DL360Gen10plus-Production-Group" with SPP 2022.03.0
+    # Warning: Any updates other than iLO FW require a server reboot!
+    # Note: To set schedule options during updates, you must create a schedule instead of a job
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/jobs"
+      method: POST
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        jobTemplateUri: "{{ jobtemplateuri }}"
+        resourceUri: "{{ groupuri }}"
+        data:
+          bundle_id: "{{ firmwarebundleID }}"
+          # The list of devices must be provided even if they are already part of the group!
+          devices: "{{ devices }}"
+    register: result
+
+  # - name: Display job creation result
+  #   debug: var=result
+
+  - name: Set a variable joburi 
+    set_fact: 
+      joburi: "{{ result.json.resourceUri }}"
+  
+  # - debug: var=joburi
+
+  - name: Wait for the job to start or fail
+    uri:
+      url: "{{ ConnectivityEndpoint }}{{ joburi }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+      return_content: true
+    retries: 50
+    delay: 5
+    until: >
+      (job1status.json.state == "RUNNING") 
+      or 
+      (job1status.json.state == "ERROR") 
+    register: job1status
+
+  # - debug: var=job1status
+
+  - name: Display error message if job has failed
+    debug: 
+      msg: 
+        - "The job has failed: {{ job1status.json.status }}"
+        - "{{ job1status.json.data.state_reason_message.message_args[0].split('\n\n') }}"
+    when: job1status.json.state == "ERROR"     
+
+  - name: Wait for the update job to complete or fail
+    uri:
+      url: "{{ ConnectivityEndpoint }}{{ joburi }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    retries: 600
+    delay: 5
+    when: job1status.json.state != "ERROR" 
+    until: jobstatus.json.state == "COMPLETE"
+    register: jobstatus
+
+  # - debug: var=jobstatus
+
+  - name: Get the update report for the servers in the group after the update is complete
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/servers/{{ item }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    when: job1status.json.state != "ERROR" 
+    loop: "{{ devices }}"
+    register: updatereport
+
+  # - debug: var=updatereport  
+
+  - name: Display Server update report
+    debug: 
+      msg: "Server={{ item.item }}, lastFirmwareUpdate={{ item.json.lastFirmwareUpdate }}"
+    when: 
+     - job1status.json.state != "ERROR"
+     - item.json.lastFirmwareUpdate is defined
+    loop: "{{ updatereport.results }}"
+    # Meassage by default is too verbose, loop_control can be used to set an empty label  
+    loop_control:
+      label: ""
+
