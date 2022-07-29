@@ -13,11 +13,12 @@
       ClientSecret: "{{ config.ClientSecret }}"
       APIversion: "{{ config.APIversion }}"
 
+#--------------------------------------COM Authentication----------------------------------------------
+
   - name: Create HPE Compute Ops Management session
     uri:
       url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
       method: POST
-      validate_certs: false
       body_format: raw
       headers:
         Content-Type: "application/x-www-form-urlencoded"
@@ -32,11 +33,13 @@
 
   # - debug: var=access_token
 
+
+#--------------------------------------SERVERS task samples--------------------------------------------
+
   - name: Collect all servers
     uri:
       url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/servers?limit=100"
       method: GET
-      validate_certs: false
       headers:
         Authorization: "Bearer {{ access_token }}"
     register: servers
@@ -56,22 +59,347 @@
     uri:
       url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/servers/{{ serverID }}"
       method: GET
-      validate_certs: false
       headers:
         Authorization: "Bearer {{ access_token }}"
     register: server
 
-  - name: Display Server 'HPE-HOL17'
-    debug: var=server
+  # - name: Display Server 'HPE-HOL17'
+  #   debug: var=server
 
   - name: Collect first 10 servers
     uri:
       url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/servers?limit=10"
       method: GET
-      validate_certs: false
       headers:
         Authorization: "Bearer {{ access_token }}"
     register: servers
 
-  - name: Display the first 10 servers
-    debug: var=servers
+  # - name: Display the first 10 servers
+  #   debug: var=servers
+
+#--------------------------------------ACTIVITIES task samples-----------------------------------------
+
+  - name: List all activities
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/activities"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: activities
+
+  # - name: Display all activities
+  #   debug: var=activities
+
+  - name: List all activities
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/activities?limit=10"
+      method: GET
+
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: activities
+
+  # - name: Display the first 10 activities
+  #   debug: var=activities
+
+#--------------------------------------FIRMWARE-BUNDLES task samples-----------------------------------
+
+
+  - name: List all firmware bundles
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/firmware-bundles"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: firmwarebundles
+
+  # - name: Display all firmware bundles
+  #   debug: var=firmwarebundles
+
+  - name: Set variable firmwarebundleID for firmware bundles SPP 2022.03.0
+    set_fact:
+      firmwarebundleID:  "{{ (firmwarebundles | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?releaseVersion=='2022.03.0'].id"
+
+  # - debug: var=firmwarebundleID
+
+  - name: List firmware bundle 2022.03.0
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/firmware-bundles/{{ firmwarebundleID }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: firmwarebundle
+
+  # - name: Display firmware bundle 2022.03.0
+  #   debug: var=firmwarebundle  
+
+#--------------------------------------GROUPS task samples---------------------------------------------
+
+  - name: List all groups
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    # Note: you cannot use groups as a variable name as it is a predefined variable name in Ansible
+    # group_names and groups are predefined by Ansible
+    register: allgroups
+
+  # - name: Display all groups
+  #   debug: var=allgroups
+
+  - name: Set variable groupid for 'Production-Group'
+    set_fact:
+      groupid:  "{{ (allgroups | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='Production-Group'].id"
+
+  - name: Set variable groupuri for a group 
+    set_fact:
+      groupuri:  "{{ (allgroups | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='Production-Group'].selfUri"
+
+  # - debug: var=groupuri
+
+  # - debug: var=groupid
+
+  - name: List group 'Production-Group'
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: group
+
+  # - name: Display group 'Production-Group'
+  #   debug: var=group  
+
+  - name: Get the critical event notification status of a group
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}/notifications"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: notifications
+
+  # - name: Display the critical event notification status of a group 
+  #   debug: var=notifications.json  
+
+  - name: Modify the critical event notification status of a group
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}/notifications"
+      method: PUT
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        criticalNotification: "True"  
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result
+
+  - name: Create group Production-Group
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups"
+      method: POST
+      status_code: 201
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        name: "Production-Group"
+        description: "My Production Group with DL360 Gen10 Plus servers"
+        firmwareBaseline: "{{ firmwarebundleID }}"
+        autoIloFwUpdateEnabled: 'True'
+        autoFwUpdateOnAdd: 'False'
+        deviceSettingsUris: []
+        data: {}
+        tags:
+          location: "Houston"
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result
+
+  - name: Modify a group 
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}"
+      method: PATCH
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/merge-patch+json"
+      body_format: json
+      body:
+        description: "This is my Production Group"
+        autoFwUpdateOnAdd: 'True'
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result
+
+  - name: Assigns devices to a group 
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}/devices"
+      method: POST
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        devices:
+          # Only servers that are not part of a group can be assigned to a group.
+          - serverId: P38471-B21+J208PP003O
+          - serverId: P39886-B21+CN70490RXP
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result
+
+  - name: Unassigns all devices from a group 
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}/devices?force=true"
+      method: DELETE
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result    
+
+  - name: Unassigns a device from a group 
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}/devices/P38471-B21+J208PP003O"
+      method: DELETE
+      status_code: 204
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result    
+
+  - name: Delete a group 
+    # You cannot delete Group if servers are still assigned to the group. 
+    # If you would like to remove all device and delete the group, provide the query parameter force=true
+    # like {{url}}/compute-ops/v1beta1/groups/{{group_id}}?force=true
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}"
+      method: DELETE
+      status_code: 204
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result  
+
+#--------------------------------------JOB TEMPLATES task samples--------------------------------------
+
+  - name: List all job templates
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/job-templates"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: jobtemplates
+
+  # - name: Display all job templates
+  #   debug: var=jobtemplates  
+
+  - name: Set variable jobtemplateid for FirmwareUpdate 
+    set_fact:
+      jobtemplateid:  "{{ (jobtemplates | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='FirmwareUpdate'].id"
+
+  # - debug: var=jobtemplateid
+
+  - name: Set variable jobtemplateuri for 'GroupFirmwareUpdate' 
+    # GroupFirmwareUpdate is the template to use to initiate a group firmware update
+    set_fact:
+      jobtemplateuri:  "{{ (jobtemplates | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='GroupFirmwareUpdate'].resourceUri"
+
+  # - debug: var=jobtemplateuri
+
+#--------------------------------------JOBS task samples-----------------------------------------------
+
+  - name: List all jobs
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/jobs"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: jobs
+
+  # - name: Display all jobs
+  #   debug: var=jobs  
+    
+  - name: Set variable jobID for ColdBoot 
+    set_fact:
+      jobID:  "{{ (jobs | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='ColdBoot'].id"
+
+  # - debug: var=jobID
+
+  - name: Collect job by ID
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/jobs/{{ jobID }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: job
+
+  # - name: Display job 'ColdBoot'
+  #   debug: var=job
+
+  - name: Set a variable for devices part of group 'Production-Group' for the following job to start the firmware update
+    set_fact:
+      devices:  "{{ group.json.devices |  map(attribute='id') | list  }}"
+  
+  # - debug: var=devices
+
+  - name: Create a job to start a firmware update
+    # This job will update all servers in the group "DL360Gen10plus-Production-Group" with SPP 2022.03.0
+    # Warning: Any updates other than iLO FW require a server reboot!
+    # Note: To set schedule options during updates, you must create a schedule instead of a job
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/jobs"
+      method: POST
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/json"
+      body_format: json
+      body:
+        jobTemplateUri: "{{ jobtemplateuri }}"
+        resourceUri: "{{ groupuri }}"
+        data:
+          bundle_id: "{{ firmwarebundleID }}"
+          # The list of devices must be provided even if they are already part of the group!
+          devices: "{{ devices }}"
+    register: result
+
+  # - name: Display job creation result
+  #   debug: var=result
+
+#--------------------------------------SCHEDULES task samples-----------------------------------------------
+
+  - name: List all schedules
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/schedules"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: schedules
+
+  # - name: Display all schedules
+  #   debug: var=schedules  
+    
