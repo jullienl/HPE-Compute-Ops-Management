@@ -61,7 +61,7 @@ $APIversion = "v1beta1"
 #region authentication
 #----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
 
-$secClientSecret = read-host  "Please enter your HPE GreenLake Client Secret" -AsSecureString
+$secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secClientSecret)
 $ClientSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr) 
 
