@@ -1,4 +1,53 @@
 ---
+# This playbook provides sample API requests for HPE Compute Ops Management
+
+# Important note: To use the Compute Ops Management API, you must configure the API client credentials in the HPE GreenLake Cloud Platform.
+
+# To learn more about how to set up the API client credentials, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us 
+
+# Information about the HPE Greenlake for Compute Ops Management API can be found at:
+# https://developer.greenlake.hpe.com/docs/greenlake/services/compute-ops/public/openapi/compute-ops-latest/overview/
+
+# Requirements: 
+# - Compute Ops Management API Client Credentials with appropriate roles, this includes:
+#    - A Client ID
+#    - A Client Secret
+#    - A Connectivity Endpoint
+
+# A com_config.json configuration file must be present in the playbook directory to define the settings that will be used to 
+# connect to the HPE GreenLake Cloud Platform, such as ClientID, ClientSecret, ConnectivityEndpoint and APIversion.
+
+
+# Author: lionel.jullien@hpe.com
+# Date:   July 2022
+
+    
+#################################################################################
+#        (C) Copyright 2022 Hewlett Packard Enterprise Development LP           #
+#################################################################################
+#                                                                               #
+# Permission is hereby granted, free of charge, to any person obtaining a copy  #
+# of this software and associated documentation files (the "Software"), to deal #
+# in the Software without restriction, including without limitation the rights  #
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell     #
+# copies of the Software, and to permit persons to whom the Software is         #
+# furnished to do so, subject to the following conditions:                      #
+#                                                                               #
+# The above copyright notice and this permission notice shall be included in    #
+# all copies or substantial portions of the Software.                           #
+#                                                                               #
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    #
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      #
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   #
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        #
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, #
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN     #
+# THE SOFTWARE.                                                                 #
+#                                                                               #
+#################################################################################
+#>
+
+
 - hosts: localhost
   gather_facts: no
       
@@ -103,7 +152,6 @@
   #   debug: var=activities
 
 #--------------------------------------FIRMWARE-BUNDLES task samples-----------------------------------
-
 
   - name: List all firmware bundles
     uri:
@@ -402,4 +450,99 @@
 
   # - name: Display all schedules
   #   debug: var=schedules  
-    
+ 
+  - name: Set variable scheduleID for 'Firmware update for group Production'
+    set_fact:
+      scheduleID:  "{{ (schedules | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='Schedule for Production-Group'].id"
+
+  # - debug: var=scheduleID
+
+  - name: Collect schedule by ID
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/schedules/{{ scheduleID }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: schedule
+
+  # - name: Display schedule 'Firmware update for group Production'
+  #   debug: var=schedule
+
+  - name: Modify a schedule
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/schedules/{{ scheduleID }}"
+      method: PATCH
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/merge-patch+json"
+      body_format: json
+      body:
+        description: "This is my new firmware update schedule for Production Group"
+        schedule:
+          startAt: "{{ '2022-10-01 4:00:00' | to_datetime }}"
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result
+
+  - name: List all history of a schedule
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/schedules/{{ scheduleID }}/history"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: schedulehistory
+
+  # - name: Display all history of a schedule
+  #   debug: var=schedulehistory
+  
+  - name: Delete a schedule by ID
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/schedules/{{ scheduleID }}"
+      method: DELETE
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+
+  - name: Create a schedule to run a firmware update for 'Production' on '2022-09-01 2:00:00'
+    # This schedule will update all servers in the group with the currently defined SPP
+    # Warning: Any updates other than iLO FW require a server reboot!
+    # Note: To perform an immediate update, you must create a job instead of a schedule
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/schedules"
+      method: POST
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/json"
+      body_format: json
+      status_code: 
+       - 200
+       - 201
+      body:
+        name: "Schedule for group Production"
+        description: "Firmware baseline update for group Production"
+        associatedResourceUri: "/api/compute/v1/groups/{{ groupid }}"
+        purpose: "GROUP_FW_UPDATE"
+        schedule:
+          # Interval can be P7D for 7 days intervals, P15m, P1M, P1Y
+          interval: Null
+          startAt: "2022-09-01 2:00:00 | to_datetime"
+        operation:
+          type: "REST"
+          method: "POST"
+          uri: "/api/compute/v1/jobs"
+          body:
+            resourceUri: "/api/compute/v1/groups/{{ groupid }}"
+            jobTemplateUri: "/api/compute/v1/job-templates/{{ jobtemplateid }}"
+            data:
+              # The list of devices must be provided even if they are already part of the group!
+              devices: 
+                - P38471-B21+J208PP003S
+                - P43357-B21+K30APP003S
+              parallel: true
+              stopOnFailure: false
+    register: result
+
+  # - name: Display schedule creation result
+  #   debug: var=result
