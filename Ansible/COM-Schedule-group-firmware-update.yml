@@ -1,0 +1,225 @@
+---
+# This playbook creates a firmware update schedule for a server group managed by HPE Compute Ops Management using a defined SPP baseline and schedule date.
+
+# Warning: Any updates other than iLO FW require a server reboot!
+
+# Note: To perform an immediate update, you must create a job instead of a schedule, see COM-Group-firmware-update.yml. 
+
+# Note: To use the Compute Ops Management API, you must configure the API client credentials in the HPE GreenLake Cloud Platform.
+
+# To learn more about how to set up the API client credentials, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us 
+
+# Information about the HPE Greenlake for Compute Ops Management API can be found at:
+# https://developer.greenlake.hpe.com/docs/greenlake/services/compute-ops/public/openapi/compute-ops-latest/overview/
+
+# Requirements: 
+# - Compute Ops Management API Client Credentials with appropriate roles, this includes:
+#    - A Client ID
+#    - A Client Secret
+#    - A Connectivity Endpoint
+
+# A com_config.json configuration file must be present in the playbook directory to define the settings that will be used to 
+# connect to the HPE GreenLake Cloud Platform, such as ClientID, ClientSecret, ConnectivityEndpoint and APIversion.
+
+
+# Author: lionel.jullien@hpe.com
+# Date:   July 2022
+
+    
+#################################################################################
+#        (C) Copyright 2022 Hewlett Packard Enterprise Development LP           #
+#################################################################################
+#                                                                               #
+# Permission is hereby granted, free of charge, to any person obtaining a copy  #
+# of this software and associated documentation files (the "Software"), to deal #
+# in the Software without restriction, including without limitation the rights  #
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell     #
+# copies of the Software, and to permit persons to whom the Software is         #
+# furnished to do so, subject to the following conditions:                      #
+#                                                                               #
+# The above copyright notice and this permission notice shall be included in    #
+# all copies or substantial portions of the Software.                           #
+#                                                                               #
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR    #
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,      #
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE   #
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER        #
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, #
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN     #
+# THE SOFTWARE.                                                                 #
+#                                                                               #
+#################################################################################
+#>
+
+- hosts: localhost
+  gather_facts: no
+      
+  vars:
+    config: "{{ lookup('file', '{{ playbook_dir }}/com_config.json') | from_json }}"
+  tasks:    
+
+  - name: set variables
+    set_fact:
+      ClientID: "{{ config.ClientID }}"
+      ConnectivityEndpoint: "{{ config.ConnectivityEndpoint }}"
+      ClientSecret: "{{ config.ClientSecret }}"
+      APIversion: "{{ config.APIversion }}"
+      # Variables to perform the group firmware update 
+      GroupName: "Production-Group"
+      Baseline: "2022.03.0" 
+      # Start schedule on Sept 1, 2022 at 2am
+      StartSchedule: "2022-09-01 2:00:00"
+
+#--------------------------------------COM Authentication-----------------------------------------------
+
+  - name: Create HPE Compute Ops Management session
+    uri:
+      url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
+      method: POST
+      body_format: raw
+      headers:
+        Content-Type: "application/x-www-form-urlencoded"
+      body: "grant_type=client_credentials&client_id={{ ClientID }}&client_secret={{ ClientSecret }}"
+    register: login
+
+  # - debug: var=login
+
+  - name: Set variable access_token for the bearer access_token
+    set_fact:
+      access_token: "{{ login.json.access_token }}"
+
+  # - debug: var=access_token
+
+#--------------------------------------Collecting data-----------------------------------------------
+
+  - name: Retrieve all firmware bundles
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/firmware-bundles"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: firmwarebundles
+
+  # - debug: var=firmwarebundles
+
+  - name: Set variable firmwarebundleID for firmware bundle "{{ Baseline }}"
+    set_fact:
+      firmwarebundleID:  "{{ (firmwarebundles | json_query(query) )[0] }}"     
+    vars:
+      query: "json.items[?releaseVersion=='{{ Baseline }}'].id"
+
+  - debug: var=firmwarebundleID
+
+  - name: Retrieve all groups
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    # Note: you cannot use groups as a variable name as it is a predefined variable name in Ansible
+    # group_names and groups are predefined by Ansible
+    register: allgroups
+
+  # - debug: var=allgroups
+
+  - name: Set variable groupid for {{ GroupName }}
+    set_fact:
+      groupid:  "{{ (allgroups | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='{{ GroupName }}'].id"
+
+  - debug: var=groupid
+
+  - name: Retrieve group {{ GroupName }}
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: group
+
+  - name: Modify the group if needed to set the defined baseline
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}"
+      method: PATCH
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/merge-patch+json"
+      body_format: json
+      body:
+        firmwareBaseline: "{{ firmwarebundleID }}"
+    register: result
+
+  # - name: Display response of the request
+  #   debug: var=result
+
+  - name: Retrieve all job templates
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/job-templates"
+      method: GET
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+    register: jobtemplates
+
+  - name: Set variable jobtemplateuri for 'GroupFirmwareUpdate' 
+    # GroupFirmwareUpdate is the template to use to initiate a group firmware update
+    set_fact:
+      jobtemplateid:  "{{ (jobtemplates | json_query(query) )[0] }}"
+    vars:
+      query: "json.items[?name=='GroupFirmwareUpdate'].id"
+
+  - debug: var=jobtemplateid
+
+  - name: Set a variable for devices part of group {{ GroupName }} for the following job to start the firmware update
+    set_fact:
+      devices:  "{{ group.json.devices |  map(attribute='id') | list  }}"
+  
+  - debug: var=devices
+
+  - name: Set a variable for startAt schedule
+    set_fact:
+      startAt:  "{{ StartSchedule | to_datetime }}"
+
+  - debug: var=startAt
+
+#--------------------------------------Schedule a firmware update -----------------------------------------------
+
+  - name: Create a schedule to run a firmware update for "{{ GroupName }}" on "{{ StartSchedule }}"
+    # This schedule will update all servers in the defined group with defined SPP
+    # Warning: Any updates other than iLO FW require a server reboot!
+    # Note: To perform an immediate update, you must create a job instead of a schedule
+    uri:
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/schedules"
+      method: POST
+      headers:
+        Authorization: "Bearer {{ access_token }}"
+        Content-Type: "application/json"
+      body_format: json
+      status_code: 
+       - 200
+       - 201
+      body:
+        name: "{{ 'Schedule for ' + GroupName }}"
+        description: "{{ GroupName + ' with baseline ' + Baseline }}"
+        associatedResourceUri: "/api/compute/v1/groups/{{ groupid }}"
+        purpose: "GROUP_FW_UPDATE"
+        schedule:
+          # Interval can be P7D for 7 days intervals, P15m, P1M, P1Y
+          interval: Null
+          startAt: "{{ startAt }}"
+        operation:
+          type: "REST"
+          method: "POST"
+          uri: "/api/compute/v1/jobs"
+          body:
+            resourceUri: "/api/compute/v1/groups/{{ groupid }}"
+            jobTemplateUri: "/api/compute/v1/job-templates/{{ jobtemplateid }}"
+            data:
+              # The list of devices must be provided even if they are already part of the group!
+              devices: "{{ devices }}"
+              parallel: true
+              stopOnFailure: false
+    register: result
+
+  - name: Display schedule creation result
+    debug: var=result
