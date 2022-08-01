@@ -255,7 +255,7 @@
      - job1status.json.state != "ERROR"
      - item.json.lastFirmwareUpdate is defined
     loop: "{{ updatereport.results }}"
-    # Meassage by default is too verbose, loop_control can be used to set an empty label  
+    # Message by default is too verbose, loop_control can be used to set an empty label  
     loop_control:
       label: ""
 
