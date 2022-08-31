@@ -70,7 +70,8 @@ $APIversion = "v1beta1"
 
 $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secClientSecret)
-$ClientSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr) 
+$ClientSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) 
+[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 
 
 # Headers creation
