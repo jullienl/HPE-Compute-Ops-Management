@@ -22,3 +22,19 @@ Before importing the dashboard, be sure to change the clientID and clientSecret 
 ```
 
 To learn how to import a Grafana dashboard, please see [Export and Import](https://grafana.com/docs/grafana/v9.0/dashboards/export-import/) from the Grafana docs
+
+
+## Prerequisites
+
+*  HPE Compute Ops Management API client credentials are required (this consists of a client ID and a client secret)
+*  Infinity plugin is required
+
+## Infinity plugin installation
+
+From an SSH session on the Grafana server, enter:
+> grafana-cli plugins install yesoreyeram-infinity-datasource
+
+Then restart the Grafana service:
+> service grafana-server restart
+
+For more details on how to install the Infinity plugin, you can check out the [Infinity GitHub repository](https://github.com/yesoreyeram/grafana-infinity-datasource).
