@@ -1,0 +1,1129 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_INFINITY-COM",
+      "label": "Infinity-COM",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "yesoreyeram-infinity-datasource",
+      "pluginName": "Infinity"
+    },
+    {
+      "name": "VAR_CLIENTID",
+      "type": "constant",
+      "label": "clientID",
+      "value": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+      "description": ""
+    },
+    {
+      "name": "VAR_CLIENTSECRET",
+      "type": "constant",
+      "label": "clientSecret",
+      "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "description": ""
+    }
+  ],
+  "__elements": [],
+  "__requires": [
+    {
+      "type": "panel",
+      "id": "bargauge",
+      "name": "Bar gauge",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "gauge",
+      "name": "Gauge",
+      "version": ""
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "9.0.2"
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    },
+    {
+      "type": "datasource",
+      "id": "yesoreyeram-infinity-datasource",
+      "name": "Infinity",
+      "version": "0.8.8"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "iteration": 1666194086719,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY-COM}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 2,
+            "pointSize": 8,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.0.2",
+      "targets": [
+        {
+          "columns": [],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY-COM}"
+          },
+          "filters": [],
+          "format": "timeseries",
+          "global_query_id": "",
+          "hide": false,
+          "refId": "B",
+          "root_selector": "",
+          "source": "url",
+          "type": "uql",
+          "uql": "parse-json \r\n| jsonata  \"series[subject.type = 'TOTAL']\" \r\n| scope \"buckets\"\r\n| project \"timestamp\"=todatetime(\"timestamp\"), \"Carbon Emissions (kgCO2e)\"=\"value\"",
+          "url": "${url}${reportID}",
+          "url_options": {
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ${session}"
+              }
+            ],
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Carbon Footprint Report (all servers)",
+      "transformations": [],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY-COM}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "kgCO2e"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Carbon Emissions"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "lcd-gauge"
+              },
+              {
+                "id": "custom.width",
+                "value": 277
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Servers"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 229
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 10,
+        "x": 12,
+        "y": 0
+      },
+      "id": 10,
+      "options": {
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Servers"
+          }
+        ]
+      },
+      "pluginVersion": "9.0.2",
+      "targets": [
+        {
+          "columns": [],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY-COM}"
+          },
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "hide": false,
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "uql",
+          "uql": "parse-json \r\n| scope \"series\" \r\n| project \"Servers\"=\"subject.displayName\", \"Carbon Emissions\"=\"summary.sum\"",
+          "url": "${url}${reportID}",
+          "url_options": {
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ${session}"
+              }
+            ],
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Carbon Footprint Report (each server)",
+      "transformations": [],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY-COM}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "ERROR": {
+                  "color": "dark-red",
+                  "index": 2
+                },
+                "OFF": {
+                  "color": "dark-red",
+                  "index": 4
+                },
+                "OK": {
+                  "color": "dark-green",
+                  "index": 0
+                },
+                "ON": {
+                  "color": "dark-green",
+                  "index": 3
+                },
+                "WARNING": {
+                  "color": "orange",
+                  "index": 1
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Health"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-text"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Power State"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-text"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last FW Update Status"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-text"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 22,
+        "w": 13,
+        "x": 0,
+        "y": 16
+      },
+      "id": 2,
+      "options": {
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Name"
+          }
+        ]
+      },
+      "pluginVersion": "9.0.2",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "name",
+              "text": "Name",
+              "type": "string"
+            },
+            {
+              "selector": "hardware.serialNumber",
+              "text": "Serial Number",
+              "type": "string"
+            },
+            {
+              "selector": "hardware.model",
+              "text": "Model",
+              "type": "string"
+            },
+            {
+              "selector": "hardware.health.summary",
+              "text": "Health",
+              "type": "string"
+            },
+            {
+              "selector": "hardware.powerState",
+              "text": "Power State",
+              "type": "string"
+            },
+            {
+              "selector": "hardware.bmc.ip",
+              "text": "iLO IP",
+              "type": "string"
+            },
+            {
+              "selector": "lastFirmwareUpdate.status",
+              "text": "Last FW Update Status",
+              "type": "string"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY-COM}"
+          },
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "${url}/compute-ops/v1beta2/servers?limit=100",
+          "url_options": {
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ${session}"
+              }
+            ],
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Server health and information",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY-COM}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 13,
+        "y": 16
+      },
+      "id": 3,
+      "options": {
+        "displayMode": "basic",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "",
+          "values": true
+        },
+        "showUnfilled": true
+      },
+      "pluginVersion": "9.0.2",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "total",
+              "text": "",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY-COM}"
+          },
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "json_options": {
+            "columnar": false,
+            "root_is_not_array": false
+          },
+          "refId": "A",
+          "root_selector": "$",
+          "source": "url",
+          "type": "json",
+          "url": "${url}/compute-ops/v1beta2/servers",
+          "url_options": {
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ${session}"
+              }
+            ],
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Number of servers",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY-COM}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 19,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": false
+      },
+      "pluginVersion": "9.0.2",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "total",
+              "text": "",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY-COM}"
+          },
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "json_options": {
+            "columnar": false,
+            "root_is_not_array": false
+          },
+          "refId": "A",
+          "root_selector": "$",
+          "source": "url",
+          "type": "json",
+          "url": "${url}/compute-ops/v1beta2/firmware-bundles",
+          "url_options": {
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ${session}"
+              }
+            ],
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Number of SPP",
+      "type": "gauge"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY-COM}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SPP"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 486
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 9,
+        "x": 13,
+        "y": 20
+      },
+      "id": 4,
+      "options": {
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "9.0.2",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "name",
+              "text": "Name",
+              "type": "string"
+            },
+            {
+              "selector": "releaseVersion",
+              "text": "Release version",
+              "type": "string"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY-COM}"
+          },
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "${url}/compute-ops/v1beta2/firmware-bundles",
+          "url_options": {
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ${session}"
+              }
+            ],
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Firmware Bundles",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY-COM}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 5,
+        "x": 13,
+        "y": 31
+      },
+      "id": 6,
+      "options": {
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "9.0.2",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "name",
+              "text": "Name",
+              "type": "string"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY-COM}"
+          },
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "${url}/compute-ops/v1beta2/groups",
+          "url_options": {
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ${session}"
+              }
+            ],
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Groups ",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "${DS_INFINITY-COM}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
+            ]
+          },
+          "unit": "kgCO2e"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 4,
+        "x": 18,
+        "y": 31
+      },
+      "id": 11,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "9.0.2",
+      "targets": [
+        {
+          "columns": [],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "${DS_INFINITY-COM}"
+          },
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "hide": false,
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "uql",
+          "uql": "\r\nparse-json \r\n| jsonata \"series[subject.type = 'TOTAL'].summary.sum\"",
+          "url": "${url}${reportID}",
+          "url_options": {
+            "data": "",
+            "headers": [
+              {
+                "key": "Authorization",
+                "value": "Bearer ${session}"
+              }
+            ],
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Total Carbon Emissions",
+      "transformations": [],
+      "type": "gauge"
+    }
+  ],
+  "refresh": false,
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "https://us-west2-api.compute.cloud.hpe.com",
+          "value": "https://us-west2-api.compute.cloud.hpe.com"
+        },
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "url",
+        "options": [
+          {
+            "selected": true,
+            "text": "https://us-west2-api.compute.cloud.hpe.com",
+            "value": "https://us-west2-api.compute.cloud.hpe.com"
+          },
+          {
+            "selected": false,
+            "text": "https://eu-central1-api.compute.cloud.hpe.com",
+            "value": "https://eu-central1-api.compute.cloud.hpe.com"
+          },
+          {
+            "selected": false,
+            "text": "https://ap-northeast1-api.compute.cloud.hpe.com",
+            "value": "https://ap-northeast1-api.compute.cloud.hpe.com"
+          }
+        ],
+        "query": "https://us-west2-api.compute.cloud.hpe.com, https://eu-central1-api.compute.cloud.hpe.com, https://ap-northeast1-api.compute.cloud.hpe.com",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "${DS_INFINITY-COM}"
+        },
+        "definition": "Infinity-COM- (infinity) ",
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "session",
+        "options": [],
+        "query": {
+          "infinityQuery": {
+            "columns": [],
+            "filters": [],
+            "format": "table",
+            "refId": "variable",
+            "root_selector": "",
+            "source": "url",
+            "type": "json",
+            "url": "https://sso.common.cloud.hpe.com/as/token.oauth2",
+            "url_options": {
+              "data": "grant_type=client_credentials&client_id=${clientID}&client_secret=${clientSecret}",
+              "headers": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/x-www-form-urlencoded"
+                },
+                {
+                  "key": "header-key",
+                  "value": "header-value"
+                }
+              ],
+              "method": "POST"
+            }
+          },
+          "query": "",
+          "queryType": "infinity"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "${DS_INFINITY-COM}"
+        },
+        "definition": "Infinity-COM- (infinity) ${url}/compute-ops/v1beta1/reports",
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "reportID",
+        "options": [],
+        "query": {
+          "infinityQuery": {
+            "columns": [
+              {
+                "selector": "reportDataUri",
+                "text": "",
+                "type": "string"
+              }
+            ],
+            "filters": [],
+            "format": "table",
+            "refId": "variable",
+            "root_selector": "",
+            "source": "url",
+            "type": "json",
+            "url": "${url}/compute-ops/v1beta1/reports",
+            "url_options": {
+              "data": "",
+              "headers": [
+                {
+                  "key": "Authorization",
+                  "value": "Bearer ${session} "
+                }
+              ],
+              "method": "GET"
+            }
+          },
+          "query": "${url}/compute-ops/v1beta1/reports",
+          "queryType": "infinity"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "description": "",
+        "hide": 2,
+        "name": "clientID",
+        "query": "${VAR_CLIENTID}",
+        "skipUrlSync": false,
+        "type": "constant",
+        "current": {
+          "value": "${VAR_CLIENTID}",
+          "text": "${VAR_CLIENTID}",
+          "selected": false
+        },
+        "options": [
+          {
+            "value": "${VAR_CLIENTID}",
+            "text": "${VAR_CLIENTID}",
+            "selected": false
+          }
+        ]
+      },
+      {
+        "hide": 2,
+        "name": "clientSecret",
+        "query": "${VAR_CLIENTSECRET}",
+        "skipUrlSync": false,
+        "type": "constant",
+        "current": {
+          "value": "${VAR_CLIENTSECRET}",
+          "text": "${VAR_CLIENTSECRET}",
+          "selected": false
+        },
+        "options": [
+          {
+            "value": "${VAR_CLIENTSECRET}",
+            "text": "${VAR_CLIENTSECRET}",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "time": {
+    "from": "2022-10-12T17:10:17.000Z",
+    "to": "2022-10-18T19:04:35.857Z"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "HPE COM using Infinity (UQL + native API calls)",
+  "uid": "vaA6Fqe7z",
+  "version": 51,
+  "weekStart": ""
+}
