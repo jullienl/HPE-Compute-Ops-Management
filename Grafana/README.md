@@ -2,6 +2,10 @@
 
 `Grafana Dashboard for HPE Compute Ops Management.json` contains everything you need (layout, variables, styles, data sources, queries, etc.) to import a predefined dashboard with different panels for HPE Compute Ops Management, including carbon emissions reports, server information and health, firmware bundles, groups information, etc.
 
+
+![2022-10-21 11_14_38-HPE COM using Infinity (UQL + native API calls) - Grafana — Mozilla Firefox](https://user-images.githubusercontent.com/13134334/197200746-6e5c7b19-362f-4f65-a844-115f97c922fb.png)
+
+
 Before importing the dashboard, be sure to change the clientID and clientSecret values with your HPE Compute Ops Management API client credentials generated from the HPE GreenLake Cloud Platform (GLCP).
 
 ```
