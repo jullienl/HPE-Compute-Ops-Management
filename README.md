@@ -1,8 +1,8 @@
-# HPE Compute Ops Management Scripts, Playbooks and Postman collections 
+# HPE GreenLake for Compute Ops Management Scripts, Playbooks, Postman collections and more.
 
-This repository will store PowerShell scripts, Ansible playbooks and more for HPE Greenlake for Compute Ops Management.
+This repository stores PowerShell, Python scripts, Ansible playbooks and more for Compute Ops Management.
 
-Information and requirements are listed in the comment section of each scripts/playbooks.
+Information and requirements are listed in the comment section of each script/playbook.
 
 My Postman collection of executable API requests for Compute Ops Management API can be found [HERE](https://www.postman.com/jullienl/workspace/lionel-jullien-s-public-workspace/collection/991177-10c5377d-892b-4612-9e81-23d75d6c2f0d?ctx=documentation)
 
