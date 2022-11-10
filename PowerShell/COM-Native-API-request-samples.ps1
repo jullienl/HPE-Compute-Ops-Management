@@ -57,6 +57,34 @@ $APIversion = "v1beta1"
 # MODULES TO INSTALL
 # None
 
+#region resource API versions
+
+#######################################################################################################################################################################################################
+# Create variables to get the API version of COM resources using the API reference.
+#   Generate a variable for each API resource ($servers_API_version, $jobs_API_version, etc.) 
+#   Set each variable value with the resource API version ($servers_API_version = v1beta2, $filters_API_version = v1beta1, etc.)
+#   $API_resources_variables contains the list of all variables that have been defined
+#######################################################################################################################################################################################################
+$response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
+$items = ($response.items | ? label -eq "API reference").items
+
+$API_resources_variables = @()
+for ($i = 1; $i -lt ($items.Count - 1); $i++) {
+  
+  $APIversion = $items[$i].label.Substring($items[$i].label.length - 7)
+  # $APIversion
+  $APIresource = $items[$i].label.Substring(0, $items[$i].label.length - 10).replace('-', '_')
+  # $APIresource
+
+  if (-not (Get-Variable -Name ${APIresource}_API_version -ErrorAction SilentlyContinue)) {
+    New-Variable -name ${APIresource}_API_version -Value $APIversion
+  }
+  $variablename = "$" + (get-variable ${APIresource}_API_version).name
+  $API_resources_variables += ($variablename)
+}
+#######################################################################################################################################################################################################
+#endregion
+
 
 #region authentication
 #----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
@@ -75,10 +103,10 @@ $body = "grant_type=client_credentials&client_id=" + $ClientID + "&client_secret
 
 
 try {
-    $response = Invoke-webrequest "https://sso.common.cloud.hpe.com/as/token.oauth2" -Method POST -Headers $headers -Body $body
+  $response = Invoke-webrequest "https://sso.common.cloud.hpe.com/as/token.oauth2" -Method POST -Headers $headers -Body $body
 }
 catch {
-    write-host "Authentication error !" $error[0].Exception.Message -ForegroundColor Red
+  write-host "Authentication error !" $error[0].Exception.Message -ForegroundColor Red
 }
 
 
@@ -97,7 +125,7 @@ $headers["Authorization"] = "Bearer $AccessToken"
 
 
 # Obtain the list of servers in your account
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers" -Method GET -Headers $headers
 $ServersList = $response.Content | ConvertFrom-Json
 
 "{0} server(s) found" -f $ServersList.count
@@ -154,30 +182,30 @@ $ServersList.items[0].host
 
 
 # Obtain the first 10 servers
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers?limit=10" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers?limit=10" -Method GET -Headers $headers
 $ServersList = $response.Content | ConvertFrom-Json
 
 
 # List of servers from the 10th
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers?offset=9" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers?offset=9" -Method GET -Headers $headers
 $ServersList = $response.Content | ConvertFrom-Json
 
 
 # Get a server by ID
-$serverid = $ServersList.items | where name -eq "HPE-HOL33" | % id
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers/$serverid" -Method GET -Headers $headers
+$serverid = $ServersList.items | where name -eq "HPE-HOL17" | % id
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers/$serverid" -Method GET -Headers $headers
 $Server = $response.Content | ConvertFrom-Json
 $server
 
 
 # List all alerts for a server
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers/$serverid/alerts" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers/$serverid/alerts" -Method GET -Headers $headers
 $alerts = $response.Content | ConvertFrom-Json
 $alerts.items
 
 
 # List all DL360 Gen10+ servers
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers" -Method GET -Headers $headers
 $DL360Gen10Plus = ($response.Content | ConvertFrom-Json).items | Where-Object { $_.hardware.model -match "ProLiant DL360 Gen10 Plus" } 
 $DL360Gen10Plus
 
@@ -189,27 +217,27 @@ $DL360Gen10Plus
 
 
 # List all activities
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/activities" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$activities_API_version/activities" -Method GET -Headers $headers
 $activities = $response.Content | ConvertFrom-Json
 $activities.items
 
 
 # List last 10 server activities
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/activities?filter=source/type eq 'Server'&limit=10" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$activities_API_version/activities?filter=source/type eq 'Server'&limit=10" -Method GET -Headers $headers
 $activities = $response.Content | ConvertFrom-Json
 $activities.items
 $activities.count
 
 
 # List last 10 firmware activities
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/activities?filter=source/type eq 'Firmware'&limit=10" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$activities_API_version/activities?filter=source/type eq 'Firmware'&limit=10" -Method GET -Headers $headers
 $firmwareactivities = $response.Content | ConvertFrom-Json
 $firmwareactivities.items
 $firmwareactivities.count
 
 
 # List required subscriptions activities
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/activities?filter=source/type eq 'Server' and contains(key,'SERVER_ASSIGNED')" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$activities_API_version/activities?filter=source/type eq 'Server' and contains(key,'SERVER_ASSIGNED')" -Method GET -Headers $headers
 $subscriptionsactivities = $response.Content | ConvertFrom-Json
 $subscriptionsactivities.items
 $subscriptionsactivities.count
@@ -222,14 +250,14 @@ $subscriptionsactivities.count
 
 
 # List all firmware bundles
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/firmware-bundles" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers
 $firmwarebundles = $response.Content | ConvertFrom-Json
 $firmwarebundles.items
 
 
 # List a group
 $firmwarebundlesid = $firmwarebundles.items | Where-Object releaseVersion -eq 2022.03.0 | ForEach-Object id
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/firmware-bundles/$firmwarebundlesid" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles/$firmwarebundlesid" -Method GET -Headers $headers
 $firmwarebundle = $response.Content | ConvertFrom-Json
 $firmwarebundle
 
@@ -241,20 +269,20 @@ $firmwarebundle
 
 
 # List all groups
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers
 $groups = $response.Content | ConvertFrom-Json
 $groups.items
 
 
 # List a group
 $groupid = $groups.items | Where-Object name -eq Production | ForEach-Object id
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups/$groupid" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups/$groupid" -Method GET -Headers $headers
 $group = $response.Content | ConvertFrom-Json
 $group
 
 
 # Delete a group
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups/$groupid" -Method DELETE -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups/$groupid" -Method DELETE -Headers $headers
 $response.Content | ConvertFrom-Json
 
 
@@ -268,7 +296,7 @@ $body = @"
     "name":  "$groupname",
     "description":  "$groupdescription",
     "firmwareBaseline": "$firmwarebundleid",
-    "autoIloFwUpdateEnabled": "True",
+    "autoIloFwUpdateEnabled": "False",
     "autoFwUpdateOnAdd": "False",
     "deviceSettingsUris": [],
     "data": {},
@@ -279,7 +307,7 @@ $body = @"
 "@ 
 
 $headers["Content-Type"] = "application/json"
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method POST -Headers $headers -Body $body
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method POST -Headers $headers -Body $body
 $response.Content | ConvertFrom-Json
 $newcreategroupid = ($response.Content | ConvertFrom-Json).id
 
@@ -293,7 +321,7 @@ $body = @"
   }
 "@ 
 
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups/$newcreategroupid/devices" -Method POST -Headers $headers -Body $body
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups/$newcreategroupid/devices" -Method POST -Headers $headers -Body $body
 $response.Content | ConvertFrom-Json
 
 
@@ -307,7 +335,7 @@ $body = @"
 "@ 
 
 $headers["Content-Type"] = "application/merge-patch+json"
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups/$newcreategroupid" -Method PATCH -Headers $headers -Body $body
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups/$newcreategroupid" -Method PATCH -Headers $headers -Body $body
 $response.Content | ConvertFrom-Json
 
 #endregion
@@ -318,14 +346,14 @@ $response.Content | ConvertFrom-Json
 
 
 # List all job templates
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/job-templates" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers
 $jobtemplates = $response.Content | ConvertFrom-Json
 $jobtemplates.items
 
 
 # Get a  job template
 $jobtemplateid = ($jobtemplates.items | ? name -eq "GroupFirmwareUpdate").id
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/job-templates/$jobtemplateid" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates/$jobtemplateid" -Method GET -Headers $headers
 $jobtemplate = $response.Content | ConvertFrom-Json
 $jobtemplate
 
@@ -337,14 +365,14 @@ $jobtemplate
 
 
 # List all jobs
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/jobs" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$jobs_API_version/jobs" -Method GET -Headers $headers
 $jobs = $response.Content | ConvertFrom-Json
 $jobs.items
 
 
 # Get a job
 $jobid = $jobs.items[0].id
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/jobs/$jobid" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$jobs_API_version/jobs/$jobid" -Method GET -Headers $headers
 $job = $response.Content | ConvertFrom-Json
 $job
 
@@ -353,10 +381,11 @@ $job
 ## This job will update all servers in the group "DL360Gen10plus-Production-Group" with SPP 2022.03.0
 ## Warning: Any updates other than iLO FW require a server reboot!
 ## Note: To set schedule options during updates, you must create a schedule instead of a job
-$jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
-$resourceUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").resourceUri
-$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq 2022.03.0 | ForEach-Object id
-$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").devices.id 
+$jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
+$resourceUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "Production").resourceUri
+$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq 2022.03.0 | ForEach-Object id
+# The list of devices must be provided even if they are already part of the group!
+$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "Production").devices.id 
 
 if ($deviceids.count -eq 1) {
   $devicesformatted = ConvertTo-Json  @("$deviceids")
@@ -364,6 +393,7 @@ if ($deviceids.count -eq 1) {
 else {
   $devicesformatted = $deviceids | ConvertTo-Json 
 }
+
 
 $body = @"
   {
@@ -378,7 +408,7 @@ $body = @"
 "@ 
 
 $headers["Content-Type"] = "application/json"
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/jobs" -Method POST -Headers $headers -Body $body
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$jobs_API_version/jobs" -Method POST -Headers $headers -Body $body
 $joburi = ($response.Content | ConvertFrom-Json).resourceUri
 
 ## Wait for the task to start or fail
@@ -389,7 +419,8 @@ do {
 
 ## Wait for the task to complete
 if ($status.state -eq "error") {
-  "Group firmware update failed! {0}" -f $status.status
+  "Group firmware update failed! {0} " -f $status.status
+  $status.data.state_reason_message.message_args
 }
 else {
   do {
@@ -401,12 +432,15 @@ else {
 
   ## Display status
   "State: {0} - Status: {1}" -f $status.state, $status.status
-}
 
-# Get the update report for the servers in the group after the update is complete.
-foreach ($deviceid in $deviceids) {
-  $report = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json).lastFirmwareUpdate 
-  $report
+
+  # Get the update report for the servers in the group after the update is complete.
+  foreach ($deviceid in $deviceids) {
+    $report = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json).lastFirmwareUpdate 
+    $report
+  }
+
+
 
 }
 
@@ -419,27 +453,27 @@ foreach ($deviceid in $deviceids) {
 
 
 # List all schedules
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules" -Method GET -Headers $headers
 $schedules = $response.Content | ConvertFrom-Json
 $schedules.items
 
 
 # Get a schedule
 $scheduleid = $schedules.items[0].id
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules/$scheduleid" -Method GET -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules/$scheduleid" -Method GET -Headers $headers
 $schedule = $response.Content | ConvertFrom-Json
 $schedule
 
 
 # Delete a schedule
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules/$scheduleid" -Method DELETE -Headers $headers
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules/$scheduleid" -Method DELETE -Headers $headers
 $response.Content | ConvertFrom-Json
 
 
 # Update a schedule
 $newname = "Firmware update for group Production"
 $description = "This upgrade is going to rock!"
-$associatedResourceUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "Production").resourceUri
+$associatedResourceUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "Production").resourceUri
 
 $body = @"
 {
@@ -451,24 +485,24 @@ $body = @"
 "@ 
 
 $headers["Content-Type"] = "application/merge-patch+json"
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules/$scheduleid" -Method PATCH -Headers $headers -Body $body
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules/$scheduleid" -Method PATCH -Headers $headers -Body $body
 $response.Content | ConvertFrom-Json
 
 
 # Create a schedule
 ## Schedules allow you to run an update with scheduling options
 ## Warning: Any updates other than iLO FW require a server reboot!
-$schedulename = "Firmware upgrade for group DL360Gen10plus-Production-Group"
-$description = "Upgrade to SPP 2022.03.0"
+$schedulename = "Firmware upgrade for group Production"
+$description = "Upgrade to SPP 2022.03.1"
 ## Start schedule on Sept 1, 2022 at 2am
-$startAt = get-date -year 2022 -Month 09 -Day 1 -Hour 2 -Minute 0  -Format o
+$startAt = get-date -year 2022 -Month 12 -Day 1 -Hour 2 -Minute 0  -Format o
 $interval = "null" # Can be P7D for 7 days intervals, P15m, P1M, P1Y
 
 
-$jobTemplateid = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").id
-$groupid = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").id
-$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq 2022.03.0 | ForEach-Object id
-$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq "DL360Gen10plus-Production-Group").devices.id 
+$jobTemplateid = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").id
+$groupid = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "Production").id
+$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq 2022.03.1 | ForEach-Object id
+$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "Production").devices.id 
 
 if ($deviceids.count -eq 1) {
   $devicesformatted = ConvertTo-Json  @("$deviceids")
@@ -508,22 +542,223 @@ $body = @"
 $headers["Content-Type"] = "application/json"
 # $idempotencyKey = (1..64|%{[byte](Get-Random -Max 128)}|foreach ToString X2) -join ''
 # $headers["Idempotency-Key"] = $idempotencyKey 
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules" -Method POST -Headers $headers -Body $body
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules" -Method POST -Headers $headers -Body $body
 $response.Content | ConvertFrom-Json
 $scheduleid = ($response.Content | ConvertFrom-Json).id
 
 # Get details about newly created schedule
-((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules/$scheduleid" -Method GET -Headers $headers).Content | ConvertFrom-Json)
-((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules/$scheduleid" -Method GET -Headers $headers).Content | ConvertFrom-Json).operation.body.data
+((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules/$scheduleid" -Method GET -Headers $headers).Content | ConvertFrom-Json)
+((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules/$scheduleid" -Method GET -Headers $headers).Content | ConvertFrom-Json).operation.body.data
 
 # Delete newly created schedule
-$response = (Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules/$scheduleid" -Method DELETE -Headers $headers) | ConvertFrom-Json
+$response = (Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules/$scheduleid" -Method DELETE -Headers $headers) | ConvertFrom-Json
 
 # Get the update report for the servers in the group after the update is complete.
 foreach ($deviceid in $deviceids) {
-  $report = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json).lastFirmwareUpdate 
+  $report = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json).lastFirmwareUpdate 
   $report
 
+}
+
+
+#endregion
+
+
+#region filters
+#-------------------------------------------------------FILTERS requests samples--------------------------------------------------------------------------------
+
+
+# List all filters
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$filters_API_version/filters" -Method GET -Headers $headers
+$filters = $response.Content | ConvertFrom-Json
+$filters.items
+
+
+# Get filterable properties
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$filters_API_version/filters/properties" -Method GET -Headers $headers
+$filtersproperties = $response.Content | ConvertFrom-Json
+$filtersproperties | format-list 
+
+
+# Get a filter
+$filterid = ($filters.items | where-object name -eq "Warnings").id
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$filters_API_version/filters/$filterid" -Method GET -Headers $headers
+$filter = $response.Content | ConvertFrom-Json
+$filter
+
+
+# Delete a saved filter
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$filters_API_version/filters/$filterid" -Method DELETE -Headers $headers
+$response.Content | ConvertFrom-Json
+
+
+# Update a saved filter
+$newname = "Warnings for powered ON servers"
+
+$body = @"
+{
+  "name": "$newname",
+  "description": "",
+  "filterResourceType": "compute-ops/server",
+  "filter": "(hardware/powerState in ('On')) and (hardware/health/summary in ('Warning'))",
+  "filterTags": null
+}
+"@ 
+
+$headers["Content-Type"] = "application/merge-patch+json"
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$filters_API_version/filters/$filterid" -Method PATCH -Headers $headers -Body $body
+$response.Content | ConvertFrom-Json
+
+
+# Create a filter
+$body = @"
+{
+  "name": "DL360 Linux servers",
+  "description": "My filter for DL360 Gen10 and Gen10 Plus Linux server",
+  "filterResourceType": "compute-ops/server",
+  "filter": "(hardware/model in ('ProLiant DL360 Gen10','ProLiant DL360 Gen10 Plus'))",
+  "filterTags": null
+}
+"@ 
+
+$headers["Content-Type"] = "application/json"
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$filters_API_version/filters" -Method POST -Headers $headers -Body $body
+$response.Content | ConvertFrom-Json
+
+#endregion
+
+
+#region server-settings
+#-------------------------------------------------------SERVER SETTINGS requests samples--------------------------------------------------------------------------------
+
+
+# List all server-settings
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$server_settings_API_version/server-settings" -Method GET -Headers $headers
+$serversettings = $response.Content | ConvertFrom-Json
+$serversettings.items
+
+
+# Get a server-settings
+$serversettingsid = ($serversettings.items | where-object name -eq "Production Firmware Settings").id
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$server_settings_API_version/server-settings/$serversettingsid" -Method GET -Headers $headers
+$serversetting = $response.Content | ConvertFrom-Json
+$serversetting
+
+
+# Delete a server-settings item
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$server_settings_API_version/server-settings/$serversettingsid" -Method DELETE -Headers $headers
+$response.Content | ConvertFrom-Json
+
+
+# Update a server-settings item
+$newname = "Webfarm Firmware Settings"
+$id = $serversetting.settings.GEN10.id
+
+$body = @"
+{
+  "name": "$newname",
+  "description": "Firmware settings for group Production",
+  "settings": {
+    "GEN10": {
+      "id": "$id"
+    }
+  }
+}
+"@ 
+
+$headers["Content-Type"] = "application/merge-patch+json"
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$server_settings_API_version/server-settings/$serversettingsid" -Method PATCH -Headers $headers -Body $body
+$response.Content | ConvertFrom-Json
+
+
+# Create a server-settings
+## Get a firmware bundle ID
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers
+$firmwarebundlesid = ($response.Content | ConvertFrom-Json).items | Where-Object releaseVersion -eq 2022.03.1 | ForEach-Object id
+
+$body = @"
+{
+  "name": "LJ server settings",
+  "description": "My server settings with SPP 2022.03.1",
+  "platformFamily": "PROLIANT",
+  "category": "FIRMWARE",
+  "settings": {
+    "GEN10": {
+      "id": "$firmwarebundlesid"
+    }
+  }
+}
+"@ 
+
+$headers["Content-Type"] = "application/json"
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$server_settings_API_version/server-settings" -Method POST -Headers $headers -Body $body
+$response.Content | ConvertFrom-Json
+
+#endregion
+
+
+#region reports
+#-------------------------------------------------------REPORTS requests samples--------------------------------------------------------------------------------
+
+
+# List all reports
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$reports_API_version/reports" -Method GET -Headers $headers
+$reports = $response.Content | ConvertFrom-Json
+$reports.items
+
+
+# Get a report metadata
+$reportid = $reports.items.id
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$reports_API_version/reports/$reportid"  -Method GET -Headers $headers
+$reportmetadata = $response.Content | ConvertFrom-Json
+$reportmetadata
+
+
+# Get a report data
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$reports_API_version/reports/$reportid/data"  -Method GET -Headers $headers
+$reportdata = $response.Content | ConvertFrom-Json
+$reportdata
+
+
+# Run a report
+## Get job template DataRoundupReportOrchestrator
+$jobtemplates = (Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json
+$jobtemplateid = ($jobtemplates.items | ? name -eq "DataRoundupReportOrchestrator").id
+## Get all servers filter
+$filters = (Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$filters_API_version/filters" -Method GET -Headers $headers).Content | ConvertFrom-Json
+$filterresourceUri = ($filters.items | where-object name -eq "All Servers").resourceUri
+
+$body = @"
+{
+  "jobTemplateUri":"/api/compute/v1/job-templates/$jobtemplateid",
+  
+  "resourceUri":"$filterresourceUri",
+  
+  "data":{
+      "reportType":"CARBON_FOOTPRINT"
+      }
+}
+"@ 
+
+$headers["Content-Type"] = "application/json"
+
+$response = Invoke-webrequest "$ConnectivityEndpoint/api/compute/v1/jobs"  -Method POST -Headers $headers -Body $body
+
+$joburi = ($response.Content | ConvertFrom-Json).resourceUri
+
+## Wait for the task to start or fail
+do {
+  $status = (Invoke-webrequest "$ConnectivityEndpoint$joburi" -Method GET -Headers $headers).content | ConvertFrom-Json
+  Start-Sleep 5
+} until ($status.state -eq "Complete" -or $status.state -eq "error")
+
+## Wait for the task to complete
+if ($status.state -eq "error") {
+  "Carbon footprint creation failure {0} " -f $status.status
+  $status.data.state_reason_message.message_args
+}
+else {
+  "Carbon Footprint Report was created successfully at {0}" -f [DateTime]($status.createdAt)
 }
 
 
