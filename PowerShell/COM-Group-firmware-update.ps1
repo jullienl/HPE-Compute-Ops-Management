@@ -107,7 +107,6 @@ $ClientID = "e419b0b6-ef7c-4049-8045-f50bed11b4e6"
 
 # The connectivity endpoint can be found in the GreenLake platform / API client information
 $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
-# "https://proton-demo-appgw-api.rugby.hpeserver.management"
 
 
 # MODULES TO INSTALL
@@ -116,7 +115,7 @@ $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 # If (-not (get-module HPEOneView.630 -ListAvailable )) { Install-Module -Name HPEOneView.630 -scope Allusers -Force }
 
 
-#region resource API versions
+#region Retrieve resource API versions
 
 #######################################################################################################################################################################################################
 # Create variables to get the API version of COM resources using the API reference.
@@ -145,7 +144,7 @@ for ($i = 1; $i -lt ($items.Count - 1); $i++) {
 #endregion
 
 
-#region authentication
+#region GreenLake authentication
 #----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
 
 $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
@@ -180,13 +179,8 @@ $headers["Authorization"] = "Bearer $AccessToken"
 #endregion
 
 
-#region Firmware-update
-#-----------------------------------------------------------Start the firmware update-----------------------------------------------------------------------------
-
-# Create a job to start a firmware update
-## This job will update all servers in the defined group with the defined SPP
-## Warning: Any updates other than iLO FW require a server reboot!
-## Note: To set schedule options during updates, you must create a schedule instead of a job
+#region Set group server settings with defined SPP
+#-----------------------------------------------------------Modify the group server settings to set the defined baseline-----------------------------------------------------------------------------
 
 # Retrieve job template resourceUri of GroupFirmwareUpdate
 $jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
@@ -198,7 +192,6 @@ if (-not  $jobTemplateUri) {
 
 # Retrieve group Uri of the defined group name
 $groupUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).resourceUri
-
 
 if (-not  $groupUri) {
   write-warning "Error, group name '$groupname' not found!"
@@ -212,6 +205,7 @@ if (-not $bundleid ) {
   write-warning "Error, firmware bundle '$baseline' not found!"
   break
 }
+
 # Retrieve group Server settings 
 $serverSettingsUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).serverSettingsUris 
 
@@ -239,6 +233,18 @@ catch {
   write-warning "Error, group $groupname server settings cannot be updated with SPP $Baseline !"
   break
 }
+
+#endregion
+
+
+#region Run group firmware update
+#-----------------------------------------------------------Start the firmware update-----------------------------------------------------------------------------
+
+# Create a job to start a firmware update
+## This job will update all servers in the defined group with the defined SPP
+## Warning: Any updates other than iLO FW require a server reboot!
+## Note: To set schedule options during updates, you must create a schedule instead of a job
+
 
 # Retrieve group device IDs 
 ## The list of devices must be provided even if they are already part of the group!
@@ -285,9 +291,14 @@ catch {
 
 $joburi = ($response.Content | ConvertFrom-Json).resourceUri
 
+#endregion
+
 
 clear-host
 
+
+#region Display firmware update activity status
+#-----------------------------------------------------------Display activities in console-----------------------------------------------------------------------------
 
 ## Wait for the task to start or fail
 do {

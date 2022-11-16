@@ -21,7 +21,7 @@ Requirements:
 
 
 Author: lionel.jullien@hpe.com
-Date:   August 2022
+Date:   Nov 2022
 
     
 #################################################################################
@@ -50,24 +50,55 @@ Date:   August 2022
 #>
 
 # Variables to perform the group firmware update 
-$GroupName = "Production-Group"
-$Baseline = "2022.03.0" 
-# Start schedule on Sept 1, 2022 at 2am
-[datetime]$StartSchedule = "09-01-2022 2:00:00"
+$GroupName = "Production"
+$Baseline = "2022.03.1" 
+# Start schedule on Dec 1, 2022 at 2am
+[datetime]$StartSchedule = "12-01-2022 2:00:00"
 
 
 # API Client Credentials
-$ClientID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+$ClientID = "e419b0b6-ef7c-4049-8045-f50bed11b4e6"
 
 # The connectivity endpoint can be found in the GreenLake platform / API client information
 $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
-$APIversion = "v1beta1"
+
 
 # MODULES TO INSTALL
-# None
+
+# HPEOneView
+# If (-not (get-module HPEOneView.630 -ListAvailable )) { Install-Module -Name HPEOneView.630 -scope Allusers -Force }
 
 
-#region authentication
+#region Retrieve resource API versions
+
+#######################################################################################################################################################################################################
+# Create variables to get the API version of COM resources using the API reference.
+#   Generate a variable for each API resource ($servers_API_version, $jobs_API_version, etc.) 
+#   Set each variable value with the resource API version ($servers_API_version = v1beta2, $filters_API_version = v1beta1, etc.)
+#   $API_resources_variables contains the list of all variables that have been defined
+#######################################################################################################################################################################################################
+$response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
+$items = ($response.items | ? label -eq "API reference").items
+
+$API_resources_variables = @()
+for ($i = 1; $i -lt ($items.Count - 1); $i++) {
+  
+  $APIversion = $items[$i].label.Substring($items[$i].label.length - 7)
+  # $APIversion
+  $APIresource = $items[$i].label.Substring(0, $items[$i].label.length - 10).replace('-', '_')
+  # $APIresource
+
+  if (-not (Get-Variable -Name ${APIresource}_API_version -ErrorAction SilentlyContinue)) {
+    New-Variable -name ${APIresource}_API_version -Value $APIversion
+  }
+  $variablename = "$" + (get-variable ${APIresource}_API_version).name
+  $API_resources_variables += ($variablename)
+}
+#######################################################################################################################################################################################################
+#endregion
+
+
+#region GreenLake authentication
 #----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
 
 $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
@@ -102,40 +133,48 @@ $headers["Authorization"] = "Bearer $AccessToken"
 #endregion
 
 
-#region Schedule-Firmware-update
-#-----------------------------------------------------------Modify the server group to set the defined baseline-----------------------------------------------------------------------------
-
+#region Set group server settings with defined SPP
+#-----------------------------------------------------------Modify the group server settings to set the defined baseline-----------------------------------------------------------------------------
 
 # Retrieve firmware bundle id of the defined baseline
-$firmwarebundleID = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/firmware-bundles" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? releaseVersion -eq $baseline).id
-  
-if (-not   $firmwarebundleID ) {
+$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq $Baseline | ForEach-Object id
+
+if (-not $bundleid ) {
   write-warning "Error, firmware bundle '$baseline' not found!"
   break
 }
+# Retrieve group Server settings 
+$serverSettingsUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).serverSettingsUris 
 
-# Retrieve group id of the defined group name
-$Groupid = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq $GroupName).id
+# Set group server settings to use defined SPP
+## Creation of the payload
+$body = @"
+{
+  "settings": {
+    "GEN10": {
+      "id": "$bundleid"
+    }
+  }
+}
+"@ 
+## Creation of the header
+$headers["Content-Type"] = "application/merge-patch+json"
 
-if (-not $GroupID) {
-  write-warning "Error, group name '$groupname' not found!"
+try {
+  $response = Invoke-webrequest "$ConnectivityEndpoint$serverSettingsUri" -Method PATCH -Headers $headers -Body $body -ErrorAction Stop
+
+  "Server settings for group $groupname has been set with SPP $Baseline" -f $response
+
+}
+catch {
+  write-warning "Error, group $groupname server settings cannot be updated with SPP $Baseline !"
   break
 }
-
-$body = @"
-  {
-    "firmwareBaseline": "$firmwarebundleID"
-  }
-"@ 
-
-$headers["Content-Type"] = "application/merge-patch+json"
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups/$Groupid" -Method PATCH -Headers $headers -Body $body
-"Group '{0}' modification to use SPP '{1}' - Status: {2}" -f $groupname, $baseline, $response.StatusDescription
 
 #endregion
 
 
-#region Schedule-Firmware-update
+#region Schedule group firmware update
 #-----------------------------------------------------------Schedule a firmware update-----------------------------------------------------------------------------
 
 # Create a schedule to perform a firmware update
@@ -148,15 +187,26 @@ $startAt = get-date $StartSchedule  -Format o
 #Schedule interval
 $interval = "null" # Can be P7D for 7 days intervals, P15m, P1M, P1Y
 
-$Jobtemplateid = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").id
+# Retrieve job template resourceUri of GroupFirmwareUpdate
+$jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
 
-if (-not  $Jobtemplateid) {
-  write-warning "Error, job template 'GroupFirmwareUpdate' not found !"
+if (-not  $jobTemplateUri) {
+  write-warning "Error, job template 'GroupFirmwareUpdate' not found!"
   break
 }
 
-# The list of devices must be provided even if they are already part of the group!
-$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq $GroupName).devices.id 
+# Retrieve group Uri of the defined group name
+$groupUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).resourceUri
+
+if (-not  $groupUri) {
+  write-warning "Error, group name '$groupname' not found!"
+  break
+}
+
+
+# Retrieve group device IDs 
+## The list of devices must be provided even if they are already part of the group!
+$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).devices.id 
 
 if ($deviceids.count -eq 1) {
   $devicesformatted = ConvertTo-Json  @("$deviceids")
@@ -165,6 +215,13 @@ else {
   $devicesformatted = $deviceids | ConvertTo-Json 
 }
 
+if ($deviceids.count -eq 0) {
+  write-warning "Error, no server found in group $groupname !"
+  break
+}
+
+
+# Creation of the payload
 $body = @"
 {
   "name": "Schedule for $GroupName",
@@ -180,8 +237,8 @@ $body = @"
                 "method": "POST",
                 "uri": "/api/compute/v1/jobs",
                 "body": {
-                          "resourceUri": "/api/compute/v1/groups/$Groupid",
-                          "jobTemplateUri": "/api/compute/v1/job-templates/$Jobtemplateid",
+                          "resourceUri": "$groupUri",
+                          "jobTemplateUri": "$jobTemplateUri",
                           "data": {
                                     "devices": $devicesformatted,
                                     "parallel": true,
@@ -192,8 +249,9 @@ $body = @"
 }
 "@ 
 
+# Creation of the request
 $headers["Content-Type"] = "application/json"
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/schedules" -Method POST -Headers $headers -Body $body
+$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$schedules_API_version/schedules" -Method POST -Headers $headers -Body $body
 
 
 "{0} - Status: {1} for {2}" -f (($response.Content | ConvertFrom-Json).name), $response.StatusDescription, [datetime]$StartSchedule
