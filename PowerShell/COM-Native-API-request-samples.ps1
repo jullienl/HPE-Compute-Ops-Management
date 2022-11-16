@@ -58,7 +58,7 @@ $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 # If (-not (get-module HPEOneView.630 -ListAvailable )) { Install-Module -Name HPEOneView.630 -scope Allusers -Force }
 
 
-#region resource API versions
+#region Retrieve resource API versions
 
 #######################################################################################################################################################################################################
 # Create variables to get the API version of COM resources using the API reference.
@@ -87,7 +87,7 @@ for ($i = 1; $i -lt ($items.Count - 1); $i++) {
 #endregion
 
 
-#region authentication
+#region GreenLake authentication
 #----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
 
 $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
