@@ -17,7 +17,7 @@ Requirements:
 
 
   Author: lionel.jullien@hpe.com
-  Date:   July 2022
+  Date:   Nov 2022
 
     
 #################################################################################
@@ -47,15 +47,16 @@ Requirements:
 
 
 # API Client Credentials
-$ClientID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+$ClientID = "e419b0b6-ef7c-4049-8045-f50bed11b4e6"
 
 # The connectivity endpoint can be found in the GreenLake platform / API client information
 $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
-$APIversion = "v1beta1"
-
 
 # MODULES TO INSTALL
-# None
+
+# HPEOneView
+# If (-not (get-module HPEOneView.630 -ListAvailable )) { Install-Module -Name HPEOneView.630 -scope Allusers -Force }
+
 
 #region resource API versions
 
@@ -93,6 +94,7 @@ $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecure
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secClientSecret)
 $ClientSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) 
 [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+
 
 # Headers creation
 $headers = @{} 
