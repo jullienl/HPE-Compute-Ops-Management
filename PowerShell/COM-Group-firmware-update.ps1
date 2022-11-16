@@ -42,6 +42,11 @@ Date:           11/14/2022 3:34:51 PM
 Status:         Firmware update successful
 Note:           The server firmware is already up to date with specified baseline SPP 2022.03.1 (15 Sep 2022). The specified baseline has been set for the server.
 
+Group:          Production
+Date:           11/14/2022 3:35:09 PM
+Status:         Group firmware update successful
+
+
 ------------------------------------------------------FAILED UPDATE-----------------------------------------------------------------------------------------------------------------
 Job state:      RUNNING
 Job status:     Step 2 of 3
@@ -54,11 +59,11 @@ Date:           11/15/2022 4:01:44 PM
 Status:         Firmware update failed
 Recommendation: Retry the firmware update. If the issue persists, create a Compute Ops Management support case (error code: FWE-115).
 
-
-Server:         HPE-HOL06
+Group:          Production
 Date:           11/15/2022 4:02:42 PM
 Status:         Group firmware update failed
 Recommendation: 1 out of 1 servers failed firmware update. Review the individual server firmware update activity, follow the recommendation to resolve the issue and retry group firmware update.
+
 
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -402,26 +407,26 @@ else {
   if ( $GroupFWupgradestatus[0].key -match "GROUP_JOB_FW_UPDATE_COMPLETED") {
 
     if ($GroupFWupgradestatus[0].message.Split("`r`n").count -gt 1) {
-      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nNote:`t`t{3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0], $GroupFWupgradestatus[0].message.split("`n")[2].substring(10)
+      "`nGroup: `t`t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nNote:`t`t{3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0], $GroupFWupgradestatus[0].message.split("`n")[2].substring(10)
     }
     else {
-      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message
+      "`nGroup: `t`t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message
     }
   }
 
   if ( $GroupFWupgradestatus[0].key -match "GROUP_JOB_FW_UPDATE_FAILED") {
 
     if ($GroupFWupgradestatus[0].message.Split("`r`n").count -gt 1 -and $GroupFWupgradestatus[0].recommendedAction) {
-      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nRecommendation: {3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0], $GroupFWupgradestatus[0].recommendedAction
+      "`nGroup: `t`t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nRecommendation: {3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0], $GroupFWupgradestatus[0].recommendedAction
     }
     elseif ($GroupFWupgradestatus[0].message.Split("`r`n").count -gt 1 -and -not $GroupFWupgradestatus[0].recommendedAction) {
-      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0]
+      "`nGroup: `t`t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0]
     }
     elseif ($GroupFWupgradestatus[0].message.Split("`r`n").count -eq 1 -and $GroupFWupgradestatus[0].recommendedAction) {
-      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nRecommendation: {3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message, $GroupFWupgradestatus[0].recommendedAction
+      "`nGroup: `t`t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nRecommendation: {3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message, $GroupFWupgradestatus[0].recommendedAction
     }
     elseif ($GroupFWupgradestatus[0].message.Split("`r`n").count -eq 1 -and -not $GroupFWupgradestatus[0].recommendedAction) {
-      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message
+      "`nGroup: `t`t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message
     }
   }
 
