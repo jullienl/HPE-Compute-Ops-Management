@@ -20,8 +20,50 @@ Requirements:
    - A Connectivity Endpoint
 
 
+Sample script output:
+---------------------------------------------------------SUCCESSFUL UPDATE------------------------------------------------------------------------------------------------------------
+Job state:      RUNNING
+Job status:     Step 2 of 3  
+
+Job state:      COMPLETE
+Job status:     Complete  
+
+Server:         HPE-HOL33 
+Date:           11/14/2022 3:24:22 PM
+Status:         Firmware update in progress
+                Staging the firmware is complete. Server reboot initiated and in progress to activate the firmware.
+
+Server:         HPE-HOL33 
+Date:           11/14/2022 3:34:52 PM
+Status:         Firmware update successful
+      
+Server:         HPE-HOL28
+Date:           11/14/2022 3:34:51 PM
+Status:         Firmware update successful
+Note:           The server firmware is already up to date with specified baseline SPP 2022.03.1 (15 Sep 2022). The specified baseline has been set for the server.
+
+------------------------------------------------------FAILED UPDATE-----------------------------------------------------------------------------------------------------------------
+Job state:      RUNNING
+Job status:     Step 2 of 3
+
+Job state:      ERROR
+Job status:     JobErrorException : 1 servers failed update
+
+Server:         HPE-HOL06
+Date:           11/15/2022 4:01:44 PM
+Status:         Firmware update failed
+Recommendation: Retry the firmware update. If the issue persists, create a Compute Ops Management support case (error code: FWE-115).
+
+
+Server:         HPE-HOL06
+Date:           11/15/2022 4:02:42 PM
+Status:         Group firmware update failed
+Recommendation: 1 out of 1 servers failed firmware update. Review the individual server firmware update activity, follow the recommendation to resolve the issue and retry group firmware update.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 Author: lionel.jullien@hpe.com
-Date:   August 2022
+Date:   Nov 2022
 
     
 #################################################################################
@@ -50,19 +92,52 @@ Date:   August 2022
 #>
 
 # Variables to perform the group firmware update 
-$GroupName = "Production-Group"
-$Baseline = "2022.03.0" 
+$GroupName = "Production"
+# $Baseline = "2022.03.1" 
+$Baseline = "2022.09.01.00" 
 
 
 # API Client Credentials
-$ClientID = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+$ClientID = "e419b0b6-ef7c-4049-8045-f50bed11b4e6"
 
 # The connectivity endpoint can be found in the GreenLake platform / API client information
 $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
-$APIversion = "v1beta1"
+# "https://proton-demo-appgw-api.rugby.hpeserver.management"
+
 
 # MODULES TO INSTALL
-# None
+
+# HPEOneView
+# If (-not (get-module HPEOneView.630 -ListAvailable )) { Install-Module -Name HPEOneView.630 -scope Allusers -Force }
+
+
+#region resource API versions
+
+#######################################################################################################################################################################################################
+# Create variables to get the API version of COM resources using the API reference.
+#   Generate a variable for each API resource ($servers_API_version, $jobs_API_version, etc.) 
+#   Set each variable value with the resource API version ($servers_API_version = v1beta2, $filters_API_version = v1beta1, etc.)
+#   $API_resources_variables contains the list of all variables that have been defined
+#######################################################################################################################################################################################################
+$response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
+$items = ($response.items | ? label -eq "API reference").items
+
+$API_resources_variables = @()
+for ($i = 1; $i -lt ($items.Count - 1); $i++) {
+  
+  $APIversion = $items[$i].label.Substring($items[$i].label.length - 7)
+  # $APIversion
+  $APIresource = $items[$i].label.Substring(0, $items[$i].label.length - 10).replace('-', '_')
+  # $APIresource
+
+  if (-not (Get-Variable -Name ${APIresource}_API_version -ErrorAction SilentlyContinue)) {
+    New-Variable -name ${APIresource}_API_version -Value $APIversion
+  }
+  $variablename = "$" + (get-variable ${APIresource}_API_version).name
+  $API_resources_variables += ($variablename)
+}
+#######################################################################################################################################################################################################
+#endregion
 
 
 #region authentication
@@ -108,32 +183,61 @@ $headers["Authorization"] = "Bearer $AccessToken"
 ## Warning: Any updates other than iLO FW require a server reboot!
 ## Note: To set schedule options during updates, you must create a schedule instead of a job
 
-# Retrieve job template id of GroupFirmwareUpdate
-$jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
+# Retrieve job template resourceUri of GroupFirmwareUpdate
+$jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
 
 if (-not  $jobTemplateUri) {
   write-warning "Error, job template 'GroupFirmwareUpdate' not found!"
   break
 }
 
-# Retrieve group uri of the defined group name
-$resourceUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq $GroupName).resourceUri
+# Retrieve group Uri of the defined group name
+$groupUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).resourceUri
 
-if (-not  $resourceUri) {
+
+if (-not  $groupUri) {
   write-warning "Error, group name '$groupname' not found!"
   break
 }
 
 # Retrieve firmware bundle id of the defined baseline
-$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq $Baseline | ForEach-Object id
+$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq $Baseline | ForEach-Object id
 
 if (-not $bundleid ) {
   write-warning "Error, firmware bundle '$baseline' not found!"
   break
 }
+# Retrieve group Server settings 
+$serverSettingsUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).serverSettingsUris 
 
-# The list of devices must be provided even if they are already part of the group!
-$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).groups | ? name -eq $GroupName).devices.id 
+# Set group server settings to use defined SPP
+## Creation of the payload
+$body = @"
+{
+  "settings": {
+    "GEN10": {
+      "id": "$bundleid"
+    }
+  }
+}
+"@ 
+## Creation of the header
+$headers["Content-Type"] = "application/merge-patch+json"
+
+try {
+  $response = Invoke-webrequest "$ConnectivityEndpoint$serverSettingsUri" -Method PATCH -Headers $headers -Body $body -ErrorAction Stop
+
+  "Server settings for group $groupname has been set with SPP $Baseline" -f $response
+  sleep 3  
+}
+catch {
+  write-warning "Error, group $groupname server settings cannot be updated with SPP $Baseline !"
+  break
+}
+
+# Retrieve group device IDs 
+## The list of devices must be provided even if they are already part of the group!
+$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).devices.id 
 
 if ($deviceids.count -eq 1) {
   $devicesformatted = ConvertTo-Json  @("$deviceids")
@@ -142,11 +246,17 @@ else {
   $devicesformatted = $deviceids | ConvertTo-Json 
 }
 
-# Creation of the payload
+if ($deviceids.count -eq 0) {
+  write-warning "Error, no server found in group $groupname !"
+  break
+}
+
+# Update defined group firmware using defined SPP
+## Creation of the payload
 $body = @"
   {
     "jobTemplateUri": "$jobTemplateUri",
-    "resourceUri": "$resourceUri",
+    "resourceUri": "$groupUri",
     "data": {
       "bundle_id": "$bundleid",
       "devices": 
@@ -155,56 +265,166 @@ $body = @"
   }
 "@ 
 
-# Creation of the request
+## Creation of the request
 $headers["Content-Type"] = "application/json"
-$response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/jobs" -Method POST -Headers $headers -Body $body
+
+
+try {
+  $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$jobs_API_version/jobs" -Method POST -Headers $headers -Body $body -ErrorAction Stop
+  
+}
+catch {
+  write-warning "Error, group $groupname upgrade failure !"
+  break
+}
+
 $joburi = ($response.Content | ConvertFrom-Json).resourceUri
+
+
+clear-host
+
 
 ## Wait for the task to start or fail
 do {
   $status = (Invoke-webrequest "$ConnectivityEndpoint$joburi" -Method GET -Headers $headers).content | ConvertFrom-Json
   Start-Sleep 5
-} until ($status.state -eq "running" -or $status.state -eq "error")
+} until ($status.state -eq "RUNNING" -or $status.state -eq "error")
 
 ## Wait for the task to complete
 if ($status.state -eq "error") {
   "Group firmware update failed! {0}" -f $status.status
 }
 else {
-  do {
-    $FWupgradestatus = (((Invoke-webrequest "$ConnectivityEndpoint/ui-doorway/compute/v1/servers/counts/state" -Method GET -Headers $headers).content | convertfrom-json).counts | gm ) | ? name -match "in progress"  | % name
-    $FWupgradestatus
+  
+  # FW update job status 
+  $status = (Invoke-webrequest "$ConnectivityEndpoint$joburi" -Method GET -Headers $headers).content | ConvertFrom-Json
+  $updatetime = [datetime]$status.updatedAt
+
+  "`nJob state: `t{0}`nJob status: `t{1}`n" -f $status.state, $status.status
+
+  # FW update activity status for each device
+  $i = 1
+
+  foreach ($deviceid in $deviceids) {
+    
+    $FWupgradestatus = (((Invoke-webrequest "$ConnectivityEndpoint/api/compute/v1/activities?count=20&sort=createdAt:desc" -Method GET -Headers $headers).content | convertfrom-json).items | ? associatedServerId -eq $deviceid) 
+    
+    if ( $FWupgradestatus) { 
+      
+      $deviceFWupgradestatus = [datetime](($FWupgradestatus | ? key -eq "SERVER_JOB_FW_UPDATE_IN_PROGRESS")[0].updatedAt)
+    
+      set-variable FWupgradestatusupdatedAt_${i} -value $deviceFWupgradestatus
+    }
+    # "Time: {0}" -f (get-variable FWupgradestatusupdatedAt_${i} -ValueOnly)
+    # Creates variables: $FWupgradestatusupdatedAt_1, FWupgradestatusupdatedAt_2, etc.
+    $i += 1
+  }
+
+  do {   
+
     $status = (Invoke-webrequest "$ConnectivityEndpoint$joburi" -Method GET -Headers $headers).content | ConvertFrom-Json
-    Start-Sleep 20
+    
+    # "`nInitial Update Time: `t`t`t{0}" -f [datetime]$updatetime
+    # "Job Update Time: `t`t`t{0}" -f [datetime]$status.updatedAt
+
+    if ( [datetime]$status.updatedAt -gt $updatetime -and [datetime]$status.updatedAt -ne $updatetime ) {
+      $updatetime = [datetime]$status.updatedAt
+      "`nJob state: `t{0}`nJob status: `t{1} " -f $status.state, $status.status
+    }    
+
+    $i = 1
+
+    foreach ($deviceid in $deviceids) {
+   
+      $FWupgradestatus = (((Invoke-webrequest "$ConnectivityEndpoint/api/compute/v1/activities?count=20&sort=createdAt:desc" -Method GET -Headers $headers).content | convertfrom-json).items | ? associatedServerId -eq $deviceid) 
+      $server = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json)
+  
+      if ( $FWupgradestatus[0].key -match "SERVER_JOB_FW_UPDATE_IN_PROGRESS" -and [datetime]$FWupgradestatus[0].updatedAt -gt $(get-variable FWupgradestatusupdatedAt_$i -ValueOnly) ) {
+        
+        set-variable FWupgradestatusupdatedAt_${i} -value ([datetime]$FWupgradestatus[0].updatedAt)
+        
+        if ($FWupgradestatus[0].message.Split("`r`n").count -gt 1) {
+          "`nServer: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nNote:`t`t{3}`n" -f $server.name, [datetime]$FWupgradestatus[0].updatedAt, $FWupgradestatus[0].message.split("`n")[0], $FWupgradestatus[0].message.split("`n")[2].substring(10)
+        }
+        else {
+          "`nServer: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $server.name, [datetime]$FWupgradestatus[0].updatedAt, $FWupgradestatus[0].message
+        }
+      }
+
+      # "`nInitial Update Time for device {0} : `t{1}" -f $i, $(get-variable FWupgradestatusupdatedAt_$i -ValueOnly)
+      # "Job Update Time for device {0} : `t`t{1}" -f $i, [datetime]$FWupgradestatus[0].updatedAt
+          
+      $i += 1
+    }
+
+    sleep 5
+
   } until ( $status.state -eq "Error" -or $status.state -eq "complete") 
 
-  ## Display status
-  "State: {0} - Status: {1}" -f $status.state, $status.status
-
-
-  $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers/$serverid" -Method GET -Headers $headers
-  $Server = $response.Content | ConvertFrom-Json
-  $server
-
-
-  # Get the update report for the servers in the group after the update is complete if lastFirmwareUpdate is defined 
+  # Display Server firmware update status 
+  
   foreach ($deviceid in $deviceids) {
 
-    $server = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$APIversion/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json)
-    # $server 
+    $FWupgradestatus = (((Invoke-webrequest "$ConnectivityEndpoint/api/compute/v1/activities?count=20&sort=createdAt:desc" -Method GET -Headers $headers).content | convertfrom-json).items | ? associatedServerId -eq $deviceid) 
+    $server = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json)
     
-    if ( (Get-Member -inputobject $server -name "lastFirmwareUpdate" -Membertype Properties) -and $null -ne $server.lastFirmwareUpdate) {
-      "Server: {0} - Report status: {1}" -f $server.name, $server.lastFirmwareUpdate.status
-       ($server.lastFirmwareUpdate.firmwareInventoryUpdates | fl *)
+    if ( $FWupgradestatus[0].key -match "SERVER_JOB_FW_UPDATE_COMPLETED") {
+
+      if ($FWupgradestatus[0].message.Split("`r`n").count -gt 1) {
+        "`nServer: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nNote:`t`t{3}`n" -f $server.name, [datetime]$FWupgradestatus[0].updatedAt, $FWupgradestatus[0].message.split("`n")[0], $FWupgradestatus[0].message.split("`n")[2].substring(10)
+      }
+      else {
+        "`nServer: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $server.name, [datetime]$FWupgradestatus[0].updatedAt, $FWupgradestatus[0].message
+      }
     }
-    elseif ((Get-Member -inputobject $server -name "lastFirmwareUpdate" -Membertype Properties) -and $null -eq $server.lastFirmwareUpdate) {
-      "Server: {0} - State: {1}" -f $server.name, "Firmware update successful - No update was required"
-    }
-    else {
-      "Server: {0} - State: {1}" -f $server.name, (($status.data.state_reason_message.message_args -split '\r?\n').Trim() | ? { $_ -match ($server.id.Substring($server.id.Length - 10, 10)) })
+
+    if ( $FWupgradestatus[0].key -match "SERVER_JOB_FW_UPDATE_FAILED") {
+
+      if ($FWupgradestatus[0].message.Split("`r`n").count -gt 1 -and $FWupgradestatus[0].recommendedAction) {
+        "`nServer: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nRecommendation: {3}`n" -f $server.name, [datetime]$FWupgradestatus[0].updatedAt, $FWupgradestatus[0].message.split("`n")[0], $FWupgradestatus[0].recommendedAction
+      }
+      elseif ($FWupgradestatus[0].message.Split("`r`n").count -gt 1 -and -not $FWupgradestatus[0].recommendedAction) {
+        "`nServer: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $server.name, [datetime]$FWupgradestatus[0].updatedAt, $FWupgradestatus[0].message.split("`n")[0]
+      }
+      elseif ($FWupgradestatus[0].message.Split("`r`n").count -eq 1 -and $FWupgradestatus[0].recommendedAction) {
+        "`nServer: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nRecommendation: {3}`n" -f $server.name, [datetime]$FWupgradestatus[0].updatedAt, $FWupgradestatus[0].message, $FWupgradestatus[0].recommendedAction
+      }
+      elseif ($FWupgradestatus[0].message.Split("`r`n").count -eq 1 -and -not $FWupgradestatus[0].recommendedAction) {
+        "`nServer: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $server.name, [datetime]$FWupgradestatus[0].updatedAt, $FWupgradestatus[0].message
+      }
     }
   }
+
+  # Display Group firmware update status 
+
+  $GroupFWupgradestatus = ((((Invoke-webrequest "$ConnectivityEndpoint/api/compute/v1/activities?count=20&sort=createdAt:desc" -Method GET -Headers $headers).content | convertfrom-json).items) | ? groupDisplayName -eq $GroupName)
+
+  if ( $GroupFWupgradestatus[0].key -match "GROUP_JOB_FW_UPDATE_COMPLETED") {
+
+    if ($GroupFWupgradestatus[0].message.Split("`r`n").count -gt 1) {
+      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nNote:`t`t{3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0], $GroupFWupgradestatus[0].message.split("`n")[2].substring(10)
+    }
+    else {
+      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message
+    }
+  }
+
+  if ( $GroupFWupgradestatus[0].key -match "GROUP_JOB_FW_UPDATE_FAILED") {
+
+    if ($GroupFWupgradestatus[0].message.Split("`r`n").count -gt 1 -and $GroupFWupgradestatus[0].recommendedAction) {
+      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nRecommendation: {3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0], $GroupFWupgradestatus[0].recommendedAction
+    }
+    elseif ($GroupFWupgradestatus[0].message.Split("`r`n").count -gt 1 -and -not $GroupFWupgradestatus[0].recommendedAction) {
+      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message.split("`n")[0]
+    }
+    elseif ($GroupFWupgradestatus[0].message.Split("`r`n").count -eq 1 -and $GroupFWupgradestatus[0].recommendedAction) {
+      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`nRecommendation: {3}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message, $GroupFWupgradestatus[0].recommendedAction
+    }
+    elseif ($GroupFWupgradestatus[0].message.Split("`r`n").count -eq 1 -and -not $GroupFWupgradestatus[0].recommendedAction) {
+      "`nGroup: `t{0} `nDate: `t`t{1}`nStatus:`t`t{2}`n" -f $GroupName, [datetime]$GroupFWupgradestatus[0].updatedAt, $GroupFWupgradestatus[0].message
+    }
+  }
+
+
 }
-
-
 #endregion
