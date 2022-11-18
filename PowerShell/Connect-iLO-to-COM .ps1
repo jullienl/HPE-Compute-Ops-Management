@@ -14,7 +14,8 @@ IP, Username, Password
 
 Requirements: 
 - HPE GreenLake company account ID (found in HPE GreenLake Cloud Platform interface in the Manage tab)
-- All compute devices must first be added to HPE GreenLake, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us (Managing Devices / Adding Devices)
+- All compute devices must first be added to HPE GreenLake, assigned to an application and to a subscription, 
+  see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us (Managing Devices / Adding Devices)
 - The servers must be prepared for management with:
          - iLO IP address set and accessible
          - A common local username and password
