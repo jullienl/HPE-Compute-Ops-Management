@@ -6,7 +6,7 @@ Actions performed:
   2/ If iLO is under the control of a OneView instance, it override the existing manager 
   3/ Connect iLO to Compute Ops Management
 
-CSV File content must follow the format: 
+The content of the CSV file must follow the below format: 
 
 IP, Username, Password
 192.168.2.1, Administrator,password
@@ -18,7 +18,7 @@ Requirements:
   see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us (Managing Devices / Adding Devices)
 - The servers must be prepared for management with:
          - iLO IP address set and accessible
-         - A common local username and password
+         - A common local username and password is not required
          
 
 Author: lionel.jullien@hpe.com
