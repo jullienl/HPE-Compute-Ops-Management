@@ -49,6 +49,8 @@ ALIAS: `Carbon Emissions (kgCO2e)`
 
 Example of a Grafana panel with a Telegraf agent interval = 10m
 
+![image](https://user-images.githubusercontent.com/13134334/203847292-2ae20cbb-a4fb-486f-ab6a-31abd72d7925.png)
+
 
 ## Requirements
 - Compute Ops Management API Client Credentials with appropriate roles, this includes:
