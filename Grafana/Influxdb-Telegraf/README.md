@@ -6,7 +6,7 @@ The Telegraf exec input plugin is used to run a Python script on a daily basis t
 
 The carbon emissions data can then be displayed in a time series Grafana graphical panel via an InfluxDB data source. 
 
-![image](https://user-images.githubusercontent.com/13134334/204872546-1e7d9a81-a0dd-4420-b61b-bb22560a19cf.png)
+![image](https://user-images.githubusercontent.com/13134334/204873169-6ca5393a-d98a-4d67-81b4-e439b4a3a507.png)
 
 More information about the Exec input plugin can be found at https://github.com/influxdata/telegraf/tree/master/plugins/inputs/exec 
 
