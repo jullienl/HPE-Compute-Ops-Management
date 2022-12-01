@@ -15,26 +15,14 @@ More information about the Exec input plugin can be found at https://github.com/
 File: `/etc/telegraf/telegraf.conf`
 
 ```
-[agent]
-  ## 1 day interval
-  interval = "24h"
-  round_interval = true
-  metric_batch_size = 1000
-  metric_buffer_limit = 10000
-  collection_jitter = "0s"
-  flush_interval = "10s"
-  flush_jitter = "0s"
-  precision = "0s"
-  hostname = ""
-  omit_hostname = false
-
 [[outputs.influxdb]]
   ## HTTP Basic Auth
    username = "telegraf"
    password = "xxxxxxxxxxxxxxx"
 
 [[inputs.exec]]
-  commands = ["/bin/python3 /tmp/COM-telegraf-Co2-collector.py"]
+  commands = ["/bin/python3 /tmp/COM-telegraf-Carbon-Footprint-collector.py"]
+  interval = "24h" 
   timeout = "500s"
   data_format = "influx"
 ```
