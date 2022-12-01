@@ -172,10 +172,16 @@ reportData = requests.request(
 
 for x in reportData['series']:
     if x['subject']['type'] == 'TOTAL':
-        Co2Emmissions = round(x['summary']['sum'], 2)
+        TotalEmissionsPerDay = round(x['buckets'][0]['value'], 2)
 
-        print("Carbon_Report,name=Total emissions={0}" .format(
-            Co2Emmissions))
-        # output: Carbon_Report,name=Total emissions=707.0
+        print("Carbon_Report TotalEmissionsPerDay={0}" .format(
+            TotalEmissionsPerDay))
+        # output: Carbon_Report TotalEmissionsPerDay=109.0
+
+        TotalEmissionsPerWeek = round(x['summary']['sum'], 2)
+
+        print("Carbon_Report TotalEmissionsPerWeek={0}" .format(
+            TotalEmissionsPerWeek))
+        # output: Carbon_Report TotalEmissionsPerWeek=707.0
 
         break
