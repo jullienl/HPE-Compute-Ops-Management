@@ -15,7 +15,8 @@ IP, Username, Password
   192.168.3.191, Administrator, P@ssw0rd
   192.168.3.193, Administrator, password
 
-Note: The same CSV file as the one used with the script 'CSV file generator for bulk add devices.ps1' can also be used because this script does not take into account the tag information
+Note: The same iLOs csv file as the one used with the script 'CSV file generator for bulk add devices.ps1' can be used 
+      because this script does not take into account the tag information if present.
 
 Requirements: 
 - HPE GreenLake company account ID (found in HPE GreenLake Cloud Platform interface in the Manage tab)
