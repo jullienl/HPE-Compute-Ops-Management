@@ -19,6 +19,7 @@ Note: The same iLOs csv file as the one used with the script 'CSV file generator
       because this script does not take into account the tag information if present.
 
 Requirements: 
+- PowerShell 5.x (Connect-HpeRedfish from HpeRedfishCmdlets library does not work with PowerShell 7.x !)
 - HPE GreenLake company account ID (found in HPE GreenLake Cloud Platform interface in the Manage tab)
 - All compute devices must first be added to HPE GreenLake, assigned to an application and to a subscription, 
   see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us (Managing Devices / Adding Devices)
@@ -70,6 +71,14 @@ $iLO_collection = import-csv "path\to\iLOs.csv"
 $HPE_GreenLake_company_account_ID = "34652ff0317711ec9bc096872580fd6d"
 
 Import-Module HpeRedfishCmdlets
+
+# Checking the PowerShell version
+if ( $psversiontable.PSVersion.major -eq 7) {
+  write-warning "PowerShell 7.x is not supported by HpeRedfishCmdlets !"
+  exit
+}
+
+#-------------------------------------------------------------------------------------------------------------------------------------
 
 $body = @"
 {"ActivationKey":"$HPE_GreenLake_company_account_ID","OverrideManager":true}
