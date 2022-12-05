@@ -1,16 +1,21 @@
 <# 
 
 This PowerShell script connect all iLOs defined in a CSV file to the HPE GreenLake Cloud Platform.
+
 Actions performed:
   1/ Set iLO proxy parameters if defined in the proxy settings variable section
   2/ If iLO is under the control of a OneView instance, it override the existing manager 
   3/ Connect iLO to Compute Ops Management
 
-The content of the CSV file must follow the below format: 
+This script has to be used once computes have been added to HPE GreenLake using the script 'CSV file generator for bulk add devices.ps1'
+
+The content of the CSV must have the following format: 
 
 IP, Username, Password
-192.168.2.1, Administrator,password
-192.168.2.2, Administrator,password
+  192.168.3.191, Administrator, P@ssw0rd
+  192.168.3.193, Administrator, password
+
+Note: The same CSV file as the one used with the script 'CSV file generator for bulk add devices.ps1' can also be used because this script does not take into account the tag information
 
 Requirements: 
 - HPE GreenLake company account ID (found in HPE GreenLake Cloud Platform interface in the Manage tab)
@@ -49,7 +54,6 @@ Date:   Nov 2022
 #                                                                               #
 #################################################################################
 #>
-
 
 $iLO_collection = import-csv "path\to\iLOs.csv"
 
