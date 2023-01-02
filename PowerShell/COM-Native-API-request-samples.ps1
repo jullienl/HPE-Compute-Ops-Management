@@ -93,7 +93,6 @@ for ($i = 1; $i -lt ($items.Count - 1); $i++) {
 $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secClientSecret)
 $ClientSecret = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) 
-[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 
 
 # Headers creation
