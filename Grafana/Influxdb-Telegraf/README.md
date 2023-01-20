@@ -42,6 +42,11 @@ Example of a Grafana panel with a Telegraf agent interval = 10m
 ![image](https://user-images.githubusercontent.com/13134334/203847292-2ae20cbb-a4fb-486f-ab6a-31abd72d7925.png)
 
 
+## Grafana Dashboard
+
+To get a Grafana dashboard already configured for HPE Compute Ops Management, simply import the JSON file `Grafana Dashboard for HPE Compute Ops Management.json` into Grafana and make sure you set the dashboard variables with your Compute Ops Management API credentials information.
+
+
 ## Requirements
 - Compute Ops Management API Client Credentials with appropriate roles, this includes:
    - A Client ID
