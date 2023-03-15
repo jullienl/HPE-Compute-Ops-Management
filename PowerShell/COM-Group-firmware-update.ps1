@@ -109,12 +109,8 @@ $ClientID = "e419b0b6-ef7c-4049-8045-f50bed11b4e6"
 $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 
 
-# MODULES TO INSTALL
 
-# HPEOneView
-# If (-not (get-module HPEOneView.630 -ListAvailable )) { Install-Module -Name HPEOneView.630 -scope Allusers -Force }
-
-
+#----------------------------------------------------------Retrieve COM resource API versions-------------------------------------------------------------------------
 #region Retrieve resource API versions
 
 #######################################################################################################################################################################################################
@@ -123,10 +119,16 @@ $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 #   Set each variable value with the resource API version ($servers_API_version = v1beta2, $filters_API_version = v1beta1, etc.)
 #   $API_resources_variables contains the list of all variables that have been defined
 #######################################################################################################################################################################################################
+
 $response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
 $items = ($response.items | ? label -eq "API reference").items
 
+$items = ($items | ? items -ne $Null | Sort-Object -Property label -Descending)
+
 $API_resources_variables = @()
+
+"COM API resources variables:" | Write-Verbose
+
 for ($i = 1; $i -lt ($items.Count - 1); $i++) {
   
   $APIversion = $items[$i].label.Substring($items[$i].label.length - 7)
@@ -136,16 +138,20 @@ for ($i = 1; $i -lt ($items.Count - 1); $i++) {
 
   if (-not (Get-Variable -Name ${APIresource}_API_version -ErrorAction SilentlyContinue)) {
     New-Variable -name ${APIresource}_API_version -Value $APIversion
-  }
-  $variablename = "$" + (get-variable ${APIresource}_API_version).name
-  $API_resources_variables += ($variablename)
+    $variablename = "$" + (get-variable ${APIresource}_API_version).name
+    $API_resources_variables += ($variablename)
+
+    "`t{0} = {1}" -f $variablename, $APIversion | Write-Verbose
+
+  } 
 }
+
 #######################################################################################################################################################################################################
 #endregion
 
 
-#region GreenLake authentication
-#----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
+#----------------------------------------------------------Connection to Compute Ops Management -----------------------------------------------------------------------------
+#region COM authentication
 
 $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secClientSecret)
@@ -178,8 +184,8 @@ $headers["Authorization"] = "Bearer $AccessToken"
 #endregion
 
 
-#region Set group server settings with defined SPP
 #-----------------------------------------------------------Modify the group server settings to set the defined baseline-----------------------------------------------------------------------------
+#region Set group server settings with defined SPP
 
 # Retrieve job template resourceUri of GroupFirmwareUpdate
 $jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
@@ -236,8 +242,8 @@ catch {
 #endregion
 
 
-#region Run group firmware update
 #-----------------------------------------------------------Start the firmware update-----------------------------------------------------------------------------
+#region Run group firmware update
 
 # Create a job to start a firmware update
 ## This job will update all servers in the defined group with the defined SPP
@@ -293,11 +299,10 @@ $joburi = ($response.Content | ConvertFrom-Json).resourceUri
 #endregion
 
 
-clear-host
-
-
-#region Display firmware update activity status
 #-----------------------------------------------------------Display activities in console-----------------------------------------------------------------------------
+#region Display firmware update activity status
+
+clear-host
 
 ## Wait for the task to start or fail
 do {

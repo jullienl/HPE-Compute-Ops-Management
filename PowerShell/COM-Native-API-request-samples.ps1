@@ -52,12 +52,9 @@ $ClientID = "e419b0b6-ef7c-4049-8045-f50bed11b4e6"
 # The connectivity endpoint can be found in the GreenLake platform / API client information
 $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 
-# MODULES TO INSTALL
-
-# HPEOneView
-# If (-not (get-module HPEOneView.630 -ListAvailable )) { Install-Module -Name HPEOneView.630 -scope Allusers -Force }
 
 
+#----------------------------------------------------------Retrieve COM resource API versions-------------------------------------------------------------------------
 #region Retrieve resource API versions
 
 #######################################################################################################################################################################################################
@@ -66,10 +63,16 @@ $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 #   Set each variable value with the resource API version ($servers_API_version = v1beta2, $filters_API_version = v1beta1, etc.)
 #   $API_resources_variables contains the list of all variables that have been defined
 #######################################################################################################################################################################################################
+
 $response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
 $items = ($response.items | ? label -eq "API reference").items
 
+$items = ($items | ? items -ne $Null | Sort-Object -Property label -Descending)
+
 $API_resources_variables = @()
+
+"COM API resources variables:" | Write-Verbose
+
 for ($i = 1; $i -lt ($items.Count - 1); $i++) {
   
   $APIversion = $items[$i].label.Substring($items[$i].label.length - 7)
@@ -79,16 +82,19 @@ for ($i = 1; $i -lt ($items.Count - 1); $i++) {
 
   if (-not (Get-Variable -Name ${APIresource}_API_version -ErrorAction SilentlyContinue)) {
     New-Variable -name ${APIresource}_API_version -Value $APIversion
-  }
-  $variablename = "$" + (get-variable ${APIresource}_API_version).name
-  $API_resources_variables += ($variablename)
+    $variablename = "$" + (get-variable ${APIresource}_API_version).name
+    $API_resources_variables += ($variablename)
+
+    "`t{0} = {1}" -f $variablename, $APIversion | Write-Verbose
+
+  } 
 }
+
 #######################################################################################################################################################################################################
 #endregion
 
-
-#region GreenLake authentication
-#----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
+#----------------------------------------------------------Connection to Compute Ops Management ----------------------------------------------------------------------
+#region COM authentication
 
 $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secClientSecret)
@@ -121,8 +127,8 @@ $headers["Authorization"] = "Bearer $AccessToken"
 #endregion
 
 
-#region servers
 #-------------------------------------------------------SERVERS requests samples--------------------------------------------------------------------------------
+#region servers
 
 
 # Obtain the list of servers in your account
@@ -213,8 +219,8 @@ $DL360Gen10Plus
 #endregion
 
 
-#region activities
 #-------------------------------------------------------ACTIVITIES requests samples--------------------------------------------------------------------------------
+#region activities
 
 
 # List all activities
@@ -246,8 +252,8 @@ $subscriptionsactivities.count
 #endregion
 
 
-#region firmware-bundles
 #-------------------------------------------------------FIRMWARE-BUNDLES requests samples--------------------------------------------------------------------------------
+#region firmware-bundles
 
 
 # List all firmware bundles
@@ -265,8 +271,8 @@ $firmwarebundle
 #endregion
 
 
-#region groups
 #-------------------------------------------------------GROUPS requests samples--------------------------------------------------------------------------------
+#region groups
 
 
 # List all groups
@@ -342,8 +348,8 @@ $response.Content | ConvertFrom-Json
 #endregion
 
 
-#region job-templates
 #-------------------------------------------------------JOB-TEMPLATES requests samples--------------------------------------------------------------------------------
+#region job-templates
 
 
 # List all job templates
@@ -361,8 +367,8 @@ $jobtemplate
 #endregion
 
 
-#region jobs
 #-------------------------------------------------------JOBS requests samples--------------------------------------------------------------------------------
+#region jobs
 
 
 # List all jobs
@@ -449,8 +455,8 @@ else {
 #endregion
 
 
-#region schedules
 #-------------------------------------------------------SCHEDULES requests samples--------------------------------------------------------------------------------
+#region schedules
 
 
 # List all schedules
@@ -565,8 +571,8 @@ foreach ($deviceid in $deviceids) {
 #endregion
 
 
-#region filters
 #-------------------------------------------------------FILTERS requests samples--------------------------------------------------------------------------------
+#region filters
 
 
 # List all filters
@@ -629,8 +635,8 @@ $response.Content | ConvertFrom-Json
 #endregion
 
 
-#region server-settings
 #-------------------------------------------------------SERVER SETTINGS requests samples--------------------------------------------------------------------------------
+#region server-settings
 
 
 # List all server-settings
@@ -698,8 +704,8 @@ $response.Content | ConvertFrom-Json
 #endregion
 
 
-#region reports
 #-------------------------------------------------------REPORTS requests samples--------------------------------------------------------------------------------
+#region reports
 
 
 # List all reports

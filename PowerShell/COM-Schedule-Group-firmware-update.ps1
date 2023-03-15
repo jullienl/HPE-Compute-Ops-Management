@@ -63,13 +63,9 @@ $ClientID = "e419b0b6-ef7c-4049-8045-f50bed11b4e6"
 $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 
 
-# MODULES TO INSTALL
 
-# HPEOneView
-# If (-not (get-module HPEOneView.630 -ListAvailable )) { Install-Module -Name HPEOneView.630 -scope Allusers -Force }
-
-
-#region Retrieve resource API versions
+#----------------------------------------------------------Retrieve COM resource API versions-------------------------------------------------------------------------
+#region Retrieve COM resource API versions
 
 #######################################################################################################################################################################################################
 # Create variables to get the API version of COM resources using the API reference.
@@ -80,7 +76,12 @@ $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 $response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
 $items = ($response.items | ? label -eq "API reference").items
 
+$items = ($items | ? items -ne $Null | Sort-Object -Property label -Descending)
+
 $API_resources_variables = @()
+
+"COM API resources variables:" | Write-Verbose
+
 for ($i = 1; $i -lt ($items.Count - 1); $i++) {
   
   $APIversion = $items[$i].label.Substring($items[$i].label.length - 7)
@@ -90,16 +91,23 @@ for ($i = 1; $i -lt ($items.Count - 1); $i++) {
 
   if (-not (Get-Variable -Name ${APIresource}_API_version -ErrorAction SilentlyContinue)) {
     New-Variable -name ${APIresource}_API_version -Value $APIversion
-  }
-  $variablename = "$" + (get-variable ${APIresource}_API_version).name
-  $API_resources_variables += ($variablename)
+    $variablename = "$" + (get-variable ${APIresource}_API_version).name
+    $API_resources_variables += ($variablename)
+
+    "`t{0} = {1}" -f $variablename, $APIversion | Write-Verbose
+
+  } 
 }
+
+
+
+
 #######################################################################################################################################################################################################
 #endregion
 
 
-#region GreenLake authentication
-#----------------------------------------------------------Connection to HPE GreenLake -----------------------------------------------------------------------------
+#----------------------------------------------------------Connection to Compute Ops Management ----------------------------------------------------------------------
+#region COM authentication
 
 $secClientSecret = read-host  "Enter your HPE GreenLake Client Secret" -AsSecureString
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secClientSecret)
@@ -132,8 +140,8 @@ $headers["Authorization"] = "Bearer $AccessToken"
 #endregion
 
 
-#region Set group server settings with defined SPP
 #-----------------------------------------------------------Modify the group server settings to set the defined baseline-----------------------------------------------------------------------------
+#region Set group server settings with defined SPP
 
 # Retrieve firmware bundle id of the defined baseline
 $bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq $Baseline | ForEach-Object id
@@ -173,8 +181,8 @@ catch {
 #endregion
 
 
-#region Schedule group firmware update
 #-----------------------------------------------------------Schedule a firmware update-----------------------------------------------------------------------------
+#region Schedule group firmware update
 
 # Create a schedule to perform a firmware update
 # This schedule will update all servers in the defined group with defined SPP
