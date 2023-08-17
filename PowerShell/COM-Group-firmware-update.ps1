@@ -129,7 +129,7 @@ $API_resources_variables = @()
 
 "COM API resources variables:" | Write-Verbose
 
-for ($i = 1; $i -lt ($items.Count - 1); $i++) {
+for ($i = 0; $i -lt ($items.Count); $i++) {
   
   $APIversion = $items[$i].label.Substring($items[$i].label.length - 7)
   # $APIversion
