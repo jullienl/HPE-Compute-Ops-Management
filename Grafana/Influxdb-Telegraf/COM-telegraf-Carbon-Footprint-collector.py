@@ -3,6 +3,8 @@ Python script to generate a Compute Ops Management carbon emissions report for T
 
 The script generates a COM carbon footprint report based on the power consumption of all servers and then returns the sum of the carbon emissions of all servers (in kgCO2e).
 
+Two measurements are available, TotalEmissionsPerWeek and TotalEmissionsPerDay.
+
 More information about the Exec input plugin can be found at https://github.com/influxdata/telegraf/tree/master/plugins/inputs/exec 
 
 Telegraf configuration (/etc/telegraf/telegraf.conf):
@@ -23,7 +25,7 @@ Note: This script uses the Compute Ops Management API, so the API client credent
 
 To learn more about how to set up the API client credentials, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us 
 
-Information about the HPE Greenlake for Compute Ops Management API can be found at:
+Information about the HPE GreenLake for Compute Ops Management API can be found at:
 https://developer.greenlake.hpe.com/docs/greenlake/services/compute-ops/public/openapi/compute-ops-latest/overview/
 
 Requirements: 
@@ -73,6 +75,10 @@ from requests_oauthlib import OAuth2Session
 # API Client Credentials
 ClientID = "5aaf115d-c5c4-4753-ba3c-cb5741c5a125"
 ClientSecret = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# InfluxDB 
+measurement = "COM_Carbon_Report"
+
 
 # The connectivity endpoint can be found in the GreenLake platform / API client information
 ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
@@ -174,14 +180,14 @@ for x in reportData['series']:
     if x['subject']['type'] == 'TOTAL':
         TotalEmissionsPerDay = round(x['buckets'][0]['value'], 2)
 
-        print("COM_Carbon_Report TotalEmissionsPerDay={0}" .format(
-            TotalEmissionsPerDay))
+        print("{0} TotalEmissionsPerDay={1}" .format(
+            measurement, TotalEmissionsPerDay))
         # output: COM_Carbon_Report TotalEmissionsPerDay=109.0
 
         TotalEmissionsPerWeek = round(x['summary']['sum'], 2)
 
-        print("COM_Carbon_Report TotalEmissionsPerWeek={0}" .format(
-            TotalEmissionsPerWeek))
+        print("{0} TotalEmissionsPerWeek={1}" .format(
+            measurement, TotalEmissionsPerWeek))
         # output: COM_Carbon_Report TotalEmissionsPerWeek=707.0
 
         break
