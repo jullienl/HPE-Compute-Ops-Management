@@ -15,9 +15,10 @@ For each of these, two measurements are available, one for the total value per w
 Telegraf configuration (/etc/telegraf/telegraf.conf):
 
 [[outputs.influxdb]]
+  database = "telegraf"
   ## HTTP Basic Auth
-   username = "telegraf"
-   password = "xxxxxxxxxxxxxxx"
+  username = "telegraf"
+  password = "xxxxxxxxxxxxxxx"
 
 [[inputs.exec]]
   commands = ["pwsh /etc/telegraf/COM-telegraf-Sustainability-collector.ps1"] 
