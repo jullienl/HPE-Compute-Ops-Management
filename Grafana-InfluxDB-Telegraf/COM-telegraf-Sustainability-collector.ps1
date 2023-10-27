@@ -110,7 +110,7 @@ $Individual_measurement = "COM_Sustainability_Individual_Report"
 #Region---------------------------------------------------Retrieve COM resource API versions-----------------------------------------------------------------------------------------
 
 #######################################################################################################################################################################################################
-# Create variables to get the API version of COM resources using the API reference.
+#   Create variables to get the API version of COM resources using the API reference.
 #   Generate a variable for each API resource ($servers_API_version, $jobs_API_version, etc.) 
 #   Set each variable value with the resource API version ($servers_API_version = v1beta2, $filters_API_version = v1beta1, etc.)
 #   $API_resources_variables contains the list of all variables that have been defined
