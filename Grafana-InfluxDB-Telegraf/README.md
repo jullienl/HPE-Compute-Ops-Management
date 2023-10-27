@@ -6,8 +6,8 @@ The combination of Telegraf, InfluxDB, and Grafana forms a powerful toolset for 
 
 - **InfluxDB**: InfluxDB is a high-performance time-series database that specializes in storing and retrieving time-stamped data. It provides efficient storage mechanisms for handling large volumes of metrics data. Telegraf sends the collected metrics to InfluxDB, where they are stored and indexed based on time. InfluxDB also offers advanced querying capabilities, allowing you to perform complex queries, aggregations, and filtering operations on the data.
 
-- **Grafana**: Grafana is a popular open-source platform used for visualization and monitoring. It connects to InfluxDB (and other data sources) and allows you to create rich, interactive dashboards to visualize your metrics data. With Grafana, you can build custom visualizations and charts, set up alerts and notifications based on metric thresholds, and share dashboards with others.
-
+- **Grafana**: Grafana is a popular open-source platform used for visualization and monitoring. It connects to InfluxDB (and other data sources) and allows you to create rich, interactive dashboards to visualize your metrics data. With Grafana, you can build custom visualizations and charts, set up alerts and notifications based on metric thresholds, and share dashboards with others.   
+       
 ![image](https://user-images.githubusercontent.com/13134334/204873169-6ca5393a-d98a-4d67-81b4-e439b4a3a507.png)
 
 This solution allows you to monitor the HPE Compute Ops Management system consumptions, carbon emissions and energy cost and identify trends, and make data-driven decisions.
