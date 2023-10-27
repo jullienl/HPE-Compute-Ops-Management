@@ -155,5 +155,6 @@ SELECT:
 
 Example of a Grafana panel with a Telegraf agent interval = 1d for all and individual servers:
 
-![image]()
+![image](https://github.com/jullienl/HPE-Compute-Ops-Management/assets/13134334/a8f853c6-32fe-4316-ac64-28c8ce10bca6)
+
 
