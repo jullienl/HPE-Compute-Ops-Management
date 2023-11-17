@@ -1,27 +1,33 @@
 ---
 # This playbook performs a firmware update of a server group managed by HPE Compute Ops Management using a defined SPP baseline.
-
-# Warning: Any updates other than iLO FW require a server reboot!
-
+#
+# Warning: Firmware updates other than iLO FW can require a server reboot!
+#
 # Note: To set schedule options during updates, you must create a schedule instead of a job, see COM-Schedule-group-firmware-update.yml
-
-# Note: To use the Compute Ops Management API, you must configure the API client credentials in the HPE GreenLake Cloud Platform.
-
-# To learn more about how to set up the API client credentials, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us 
-
+#
 # Information about the HPE Greenlake for Compute Ops Management API can be found at:
 # https://developer.greenlake.hpe.com/docs/greenlake/services/compute-ops/public/openapi/compute-ops-latest/overview/
-
-# Requirements: 
-# - Compute Ops Management API Client Credentials with appropriate roles, this includes:
-#    - A Client ID
-#    - A Client Secret
-#    - A Connectivity Endpoint
-
-# A com_config.json configuration file must be present in the playbook directory to define the settings that will be used to 
-# connect to the HPE GreenLake Cloud Platform, such as ClientID, ClientSecret, ConnectivityEndpoint and APIversion.
-
-
+#
+# Preparation to run the playbooks: 
+#
+# - Secure your HPE Compute Ops Management credentials, using Ansible vault to encrypt them. From the root of this Ansible project on the Ansible control node, run:   
+#     
+#     $ ansible-vault create GLCP_US_West_credentials_encrypted.yml
+#        
+#     Once the password is entered, type the following content using your own API client credentials and connectivity endpoint:
+#     
+#      ---
+#      ClientID: "xxxxxxxx-xxxx-xxx-xxx-xxxxxxxxx"
+#      ClientSecret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+#      ConnectivityEndpoint: "https://<connectivity_endpoint>-api.compute.cloud.hpe.com"
+#      
+#     Note: To access the HPE Compute Ops Management API, you need to create your client credentials on the HPE GreenLake platform, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us&page=GUID-23E6EE78-AAB7-472C-8D16-7169938BE628.html
+#
+# - To run this playbook, use:
+#
+#   $ ansible-playbook COM-Group-firmware-update.yml --ask-vault-password 
+#
+#
 # Author: lionel.jullien@hpe.com
 # Date:   July 2022
 
@@ -53,22 +59,18 @@
 
 - hosts: localhost
   gather_facts: no
-      
-  vars:
-    config: "{{ lookup('file', '{{ playbook_dir }}/com_config.json') | from_json }}"
+  vars_files:
+    - GLCP_US_West_credentials_encrypted.yml    
   tasks:    
 
   - name: set variables
     set_fact:
-      ClientID: "{{ config.ClientID }}"
-      ConnectivityEndpoint: "{{ config.ConnectivityEndpoint }}"
-      ClientSecret: "{{ config.ClientSecret }}"
-      APIversion: "{{ config.APIversion }}"
       # Variables to perform the group firmware update 
       GroupName: "Production-Group"
       Baseline: "2022.03.0" 
 
-#--------------------------------------COM Authentication-----------------------------------------------
+
+#--------------------------------------Authentication with COM----------------------------------------------------------------------------------
 
   - name: Create HPE Compute Ops Management session
     uri:
@@ -88,11 +90,55 @@
 
   # - debug: var=access_token
 
-#--------------------------------------Collecting data-----------------------------------------------
+
+#--------------------------------------Capture COM resource API versions -----------------------------------------------------------------------
+
+  - name: Capture resource API versions from the COM API reference
+    uri:
+      url: "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml"
+      method: GET
+      return_content: true
+    register: data
+    until: data.status == 200
+    retries: 5
+    delay: 5
+    delegate_to: localhost
+
+  # - debug: var=data
+
+  - name: Set a variable for the COM API reference content
+    set_fact:
+      API_reference_content: "{{ data.content }}"
+
+  # - debug: var=API_reference_content
+
+  - name: Set a variable for items property of the COM API reference content 
+    set_fact:
+      items: "{{ API_reference_content | json_query(query) }}"
+    vars:
+      query: "items[?label=='API reference'].items"
+
+  # - debug:
+  #     msg: "{{ items[0] }}"
+
+  - name: Set variables for each API version
+    set_fact:
+      API_resources_list: "{{ API_resources_list|default([]) +   [ { 'name': item.label | regex_replace('.{10}$', '') | replace('-', '_') , 'value': item.label[-7:] } ]    }}"
+      "{{ (item.label | regex_replace('.{10}$', '') | replace('-', '_') ) + '_API_version' }}": "{{ item.label[-7:] }}"
+    loop: "{{ items[0][1:-1] | reverse }}"
+    loop_control:
+      label: "Variable set: {{ (item.label | regex_replace('.{10}$', '')  | replace('-', '_')) + '_API_version' }} = {{ item.label[-7:] }}"
+  # - name: Print API_resources_list variables
+  #   debug:
+  #       var=API_resources_list
+  #       var=hostvars[inventory_hostname]
+
+
+#--------------------------------------Collecting data------------------------------------------------------------------------------------------
 
   - name: Retrieve all firmware bundles
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/firmware-bundles"
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ firmware_bundles_API_version }}/firmware-bundles"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -110,7 +156,7 @@
 
   - name: Retrieve all groups
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups"
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -138,7 +184,7 @@
 
   - name: Retrieve group {{ GroupName }}
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/groups/{{ groupid }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -146,7 +192,7 @@
  
   - name: Retrieve all job templates
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/job-templates"
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ job_templates_API_version }}/job-templates"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -167,14 +213,15 @@
   
   - debug: var=devices
 
-#--------------------------------------Start the firmware update -----------------------------------------------
+
+#--------------------------------------Start the firmware update -------------------------------------------------------------------------------
 
   - name: Create a job to start a firmware update
     # This job will update all servers in the defined group with the defined SPP
     # Warning: Any updates other than iLO FW require a server reboot!
     # Note: To set schedule options during updates, you must create a schedule instead of a job
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/jobs"
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ jobs_API_version }}/jobs"
       method: POST
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -238,7 +285,7 @@
 
   - name: Get the update report for the servers in the group after the update is complete
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ APIversion }}/servers/{{ item }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ servers_API_version }}/servers/{{ item }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"

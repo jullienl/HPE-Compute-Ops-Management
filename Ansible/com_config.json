@@ -1,7 +1,0 @@
-{
-    "ClientID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    "ClientSecret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "ConnectivityEndpoint": "https://us-west2-api.compute.cloud.hpe.com",
-    "APIversion": "v1beta1"
-        
-}
