@@ -120,7 +120,7 @@ $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
 #   $API_resources_variables contains the list of all variables that have been defined
 #######################################################################################################################################################################################################
 
-$response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
+$response = Invoke-RestMethod -Uri "" -Method GET
 $items = ($response.items | ? label -eq "API reference").items
 
 $items = ($items | ? items -ne $Null | Sort-Object -Property label -Descending)
