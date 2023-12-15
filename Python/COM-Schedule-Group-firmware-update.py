@@ -9,7 +9,7 @@ Note: To use the Compute Ops Management API, you must configure the API client c
 
 To learn more about how to set up the API client credentials, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us 
 
-Information about the HPE Greenlake for Compute Ops Management API can be found at:
+Information about the HPE GreenLake for Compute Ops Management API can be found at:
 https://developer.greenlake.hpe.com/docs/greenlake/services/compute-ops/public/openapi/compute-ops-latest/overview/
 
 Requirements: 

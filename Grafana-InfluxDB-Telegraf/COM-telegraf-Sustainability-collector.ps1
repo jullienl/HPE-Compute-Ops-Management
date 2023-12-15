@@ -117,7 +117,7 @@ $Individual_measurement = "COM_Sustainability_Individual_Report"
 #######################################################################################################################################################################################################
 
 do {
-    $response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-hpe-hcss-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
+    $response = Invoke-RestMethod -Uri "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-glcp-doc-portal-docs-greenlake-services-compute-ops-sidebars.yaml" -Method GET
     Start-Sleep 2
 }     
 until ( $response.items )
