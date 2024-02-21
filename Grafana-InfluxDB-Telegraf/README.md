@@ -1,4 +1,4 @@
-# Influxdb/Telegraf/Grafana for HPE Compute Ops Management sustainability data
+# Telegraf/Influxdb/Grafana for HPE Compute Ops Management sustainability data
 
 The combination of Telegraf, InfluxDB, and Grafana forms a powerful toolset for collecting, storing, and visualizing HPE Compute Ops Management sustainability data. 
 
