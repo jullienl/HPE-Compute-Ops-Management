@@ -64,7 +64,7 @@ $iLO_collection = import-csv "path\to\iLOs.csv"
 # $ProxyServer = "web-proxy.lj.lab"
 # $ProxyPort = "8088"
 # $ProxyUserName = "demopaq"
-# $ProxyPassword = "password"
+# $ProxyPassword = "xxxxxxxxx"
 
 
 # HPE GreenLake company account ID (found in HPE GreenLake Cloud Platform interface in the Manage tab)

@@ -2,7 +2,7 @@
 
 This script performs a firmware update of a server group managed by HPE Compute Ops Management using a defined SPP baseline.
 
-Warning: Any updates other than iLO FW require a server reboot!
+Warning: Any updates other than iLO FW may require a server reboot!
 
 Note: To set schedule options during updates, you must create a schedule instead of a job, see COM-Schedule-group-firmware-update.ps1
 
