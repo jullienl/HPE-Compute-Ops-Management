@@ -166,6 +166,7 @@ do {
     }
     catch {
         write-host "Authentication error !" $error[0].Exception.Message -ForegroundColor Red
+        return
     }
 } until ($response.access_token)
 
