@@ -96,8 +96,8 @@ Date:   October 2023
 #>
 
 # HPE COM API Client Credentials
-ClientID = "5aaf115d-c5c4-4753-ba3c-cb5741c5a125"
-ClientSecret = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+$ClientID = "5aaf115d-c5c4-4753-ba3c-cb5741c5a125"
+$ClientSecret = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 # The connectivity endpoint can be found in the GreenLake platform / API client information
 $ConnectivityEndpoint = "https://us-west2-api.compute.cloud.hpe.com"
