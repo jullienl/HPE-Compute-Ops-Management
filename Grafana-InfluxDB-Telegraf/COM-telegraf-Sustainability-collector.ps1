@@ -12,7 +12,7 @@ Today, HPE COM provides for each server, as well as for all servers the followin
   
 For each of these, two measurements are available, one for the total value per week and one for the total value per day.
 
-Telegraf configuration (/etc/telegraf/telegraf.conf):
+Telegraf configuration (/etc/telegraf/HPE_COM.conf):
 
 [[outputs.influxdb]]
   database = "telegraf"
@@ -21,7 +21,7 @@ Telegraf configuration (/etc/telegraf/telegraf.conf):
   password = "xxxxxxxxxxxxxxx"
 
 [[inputs.exec]]
-  commands = ["pwsh /etc/telegraf/COM-telegraf-Sustainability-collector.ps1"] 
+  commands = ["pwsh <path>/COM-telegraf-Sustainability-collector.ps1"] 
   interval = "24h" 
   timeout = "500s"
   data_format = "influx"
