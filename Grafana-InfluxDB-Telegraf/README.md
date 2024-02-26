@@ -24,6 +24,11 @@ This solution allows you to monitor the HPE Compute Ops Management system consum
 - HPE Compute Ops Management API Client Credentials. To learn more about how to set up the API client credentials, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us 
 
 
+## Intallation of Telegraf, InfluxDB and Grafana
+
+For the installation steps of the TIG stack ecosystem on Rocky Linux 9.3, you can refer to [Installation steps of the TIG stack ecosystem](https://github.com/jullienl/HPE-Compute-Ops-Management/blob/main/Grafana-InfluxDB-Telegraf/Installation%20steps%20of%20the%20TIG%20stack%20ecosystem.md)
+
+
 ## Telegraf/Exec script for collecting sustainability data from HPE Compute Ops Management. 
 
 In order to gather sustainability data from HPE Compute Ops Management, you can use the PowerShell script `COM-telegraf-Sustainability-collector.ps1`. This script needs to be executed periodically using the Exec plugin in Telegraf. 
@@ -72,7 +77,8 @@ COM_Sustainability_Individual_Report 2M2946009Z_TotalEnergyCostPerDay=0.14
 
 Example of a Telegraf configuration running the PowerShell script every day with a 500-second timeout:
 
-File: `/etc/telegraf/telegraf.conf`
+File: `/etc/telegraf/HPE_COM.conf`
+
 
 ```
 [[outputs.influxdb]]
@@ -82,12 +88,15 @@ File: `/etc/telegraf/telegraf.conf`
   password = "xxxxxxxxxxxxxxx"
 
 [[inputs.exec]]
-  commands = ["pwsh /etc/telegraf/COM-telegraf-Sustainability-collector.ps1"] 
+  commands = ["/opt/microsoft/powershell/7/pwsh -file /etc/telegraf/COM-telegraf-Sustainability-collector.ps1"] 
   interval = "24h" 
   timeout = "500s"
   data_format = "influx"
 
 ```
+
+**Note**: To get the PowerShell path, use `which pwsh`
+
 
 ## Grafana configuration
 
@@ -96,21 +105,24 @@ File: `/etc/telegraf/telegraf.conf`
 To add a Grafana data source for InfluxDB, follow these steps:
 
 1. Open your Grafana web interface and log in.
-2. Click on the toggle menu and select **Data Sources**.
-4. On the Data Sources page, click on the **Add new data source** button.
-5. In the **Choose a data source type** section, search for **InfluxDB** and click on it.
-6. Fill in the following information:
-   - **Name**: Choose a name for your data source (e.g., "InfluxDB-Telegraf").
-   - **Query Language**: Select InfluxQL
+2. Click on the toggle menu and select **Administration** then **Plugins**
+4. On the Plugins page, search for **InfluxDB** and click on it.
+6. Then click on **Add new data source** and fill in the following information:
    - **URL**: Enter the base URL of your InfluxDB instance (e.g., http://localhost:8086).
    - **Auth**: Select the appropriate authentication parameters for your data source.
-   - **Database**: Specify the name of the InfluxDB database you want to connect to (e.g., "telegraf" as defined in `/etc/telegraf/telegraf.conf` ).
-   - **User**: If authentication is enabled, enter the username (e.g., "telegraf" as configured in InfluxDB and defined in `/etc/telegraf/telegraf.conf`).
-   - **Password**: If authentication is enabled, enter the password (e.g., "xxxxxxxxxxxxxxx" as configured in InfluxDB and defined in `/etc/telegraf/telegraf.conf`).
+   - **Database**: Specify the name of the InfluxDB database you want to connect to (e.g., "telegraf" as defined in `/etc/telegraf/HPE_COM.conf` ).
+   - **User**: If authentication is enabled, enter the username (e.g., "telegraf" as configured in InfluxDB and defined in `/etc/telegraf/HPE_COM.conf`).
+   - **Password**: If authentication is enabled, enter the password (e.g., "xxxxxxxxxxxxxxx" as configured in InfluxDB and defined in `/etc/telegraf/HPE_COM.conf`).
    - **HTTP Method**: Select the appropriate HTTP method for your InfluxDB instance.
 7. Once you have filled in the required fields, click on the **Save & Test** button.
 
+
 ### Grafana panels for total sustainability report
+
+To quickly set up a Grafana dashboard showing the total sustainability data collected by the PowerShell script, you can import a preconfigured dashboard using the [HPE COM sustainability report (TIG stack with PowerShell script)-1708941917817](https://github.com/jullienl/HPE-Compute-Ops-Management/blob/main/Grafana-InfluxDB-Telegraf/HPE%20COM%20sustainability%20report%20(TIG%20stack%20with%20PowerShell%20script)-1708941917817.json) JSON file. 
+
+
+Or manually, you can use:
 
 Data source: `Influxdb`
 
