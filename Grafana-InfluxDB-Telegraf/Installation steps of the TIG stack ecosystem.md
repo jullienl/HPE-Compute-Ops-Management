@@ -13,11 +13,8 @@ sudo dnf update -y
 ## Clone the Github repository
 
 ```
-sudo dnf install git
-mkdir ~/Projects
-cd ~/Projects
+sudo dnf install git -y
 git clone https://github.com/jullienl/HPE-Compute-Ops-Management
-cd HPE-Compute-Ops-Management/Grafana-InfluxDB-Telegraf
 ```
 
 ## Install InfluxDB
@@ -76,10 +73,10 @@ Create an Administrative User:
 influx
 ```
 
-Create an administrative user (replace `admin` and `password123` with your chosen username and password):
+Create an administrative user (you can replace `telegraf` and `password` with your chosen username and password):
 
 ```influxql
-CREATE USER admin WITH PASSWORD 'password123' WITH ALL PRIVILEGES
+CREATE USER telegraf WITH PASSWORD 'password' WITH ALL PRIVILEGES
 ```
 
 Exit the InfluxDB CLI:
@@ -94,6 +91,15 @@ exit
 Install Telegraf:
 ```sh
 sudo yum install -y telegraf
+```
+
+Configue Telegraf output to Influxdb:
+```sh
+cat <<EOF | sudo tee /etc/telegraf/telegraf.d/HPE_COM.conf
+[[outputs.influxdb]]
+   username = "telegraf"
+   password = "password"
+EOF
 ```
 
 Start and enable Telegraf service:
@@ -174,7 +180,7 @@ You can copy the following command block and paste it into your terminal window 
 
 ```sh
 # Clone the Github repository
-sudo dnf install git
+sudo dnf install git -y
 git clone https://github.com/jullienl/HPE-Compute-Ops-Management
 # Install InfluxDB
 cat <<EOF | sudo tee /etc/yum.repos.d/influxdata.repo
@@ -195,6 +201,11 @@ sudo systemctl restart influxdb
 influx -execute "CREATE USER telegraf WITH PASSWORD 'password' WITH ALL PRIVILEGES"
 # Install Telegraf
 sudo yum install -y telegraf
+cat <<EOF | sudo tee /etc/telegraf/telegraf.d/HPE_COM.conf
+[[outputs.influxdb]]
+   username = "telegraf"
+   password = "password"
+EOF
 sudo systemctl start telegraf
 sudo systemctl enable telegraf
 # Install Grafana
