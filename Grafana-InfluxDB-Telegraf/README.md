@@ -1,8 +1,8 @@
 # Telegraf/Influxdb/Grafana for HPE Compute Ops Management sustainability data
 
-The combination of Telegraf, InfluxDB, and Grafana forms a powerful toolset for collecting, storing, and visualizing HPE Compute Ops Management sustainability data. 
+The combination of Telegraf, InfluxDB, and Grafana (known as the TIG stack) forms a powerful toolset for collecting, storing, and visualizing HPE Compute Ops Management sustainability data. 
 
-- **Telegraf**: Telegraf acts as the collection agent, responsible for collecting sustainability data from HPE Compute Ops Management. Telegraf allows you to configure which metrics to collect, how frequently to collect them, and where to send the data. 
+- **Telegraf**: Telegraf acts as the collection agent, responsible for collecting sustainability data from HPE Compute Ops Management. This is achieved through the execution of PowerShell scripts at customizable intervals. It provides flexibility to define the specific metrics to be gathered, the collection frequency, and the destination for the data aggregation. 
 
 - **InfluxDB**: InfluxDB is a high-performance time-series database that specializes in storing and retrieving time-stamped data. It provides efficient storage mechanisms for handling large volumes of metrics data. Telegraf sends the collected metrics to InfluxDB, where they are stored and indexed based on time. InfluxDB also offers advanced querying capabilities, allowing you to perform complex queries, aggregations, and filtering operations on the data.
 
@@ -96,8 +96,6 @@ File: `/etc/telegraf/HPE_COM.conf`
   data_format = "influx"
 
 ```
-
-**Note**: To get the PowerShell path, use `which pwsh`
 
 
 ## Grafana configuration
