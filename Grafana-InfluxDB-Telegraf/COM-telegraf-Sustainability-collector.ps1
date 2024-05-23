@@ -107,7 +107,7 @@ $Total_measurement = "COM_Sustainability_Total_Report"
 $Individual_measurement = "COM_Sustainability_Individual_Report"
 
 
-#Region---------------------------------------------------Retrieve COM resource API versions-----------------------------------------------------------------------------------------
+#Region---------------------------------------------------Set environment variables for all resource API versions (from the API reference)----------------------------------------
 
 #######################################################################################################################################################################################################
 #   Create variables to get the API version of COM resources using the API reference.
@@ -180,7 +180,7 @@ $headers["Authorization"] = "Bearer $AccessToken"
 
 #endregion
 
-#Region --------------------------------------------------Collect data---------------------------------------------------------------------------------------------------------------
+#Region --------------------------------------------------Set environment variables for all job templates----------------------------------------------------------------------------
 
 # Retrieve job template id of DataRoundupReportOrchestrator
 
@@ -222,64 +222,89 @@ if (! $allfilterUri) {
 
 #Region --------------------------------------------------Create a Sustainability Report for all servers-----------------------------------------------------------------------------
 
-# Run Sustainability report
-
-# Creation of the payload
-$jobTemplateUri = "/api/compute/v1/job-templates/" + $jobtemplateId
-
-$body = @{}
-$body['jobTemplateUri'] = $jobTemplateUri
-$body['resourceUri'] = $allfilterUri
-
-$data = @{}
-$data['reportType'] = "CARBON_FOOTPRINT"
-$body['data'] = $data
-
-$body = $body | ConvertTo-Json
-
-
-$url = $ConnectivityEndpoint + '/api/compute/v1/jobs'
+# Get all COM reports
+$url = "$ConnectivityEndpoint/compute-ops/$reports_API_version/reports" 
 
 try {
-    $response = Invoke-RestMethod $url -Method POST -Body $Body -ContentType "application/json" -Headers $headers
-    $jobUri = $response.resourceUri
-    $jobId = $response.id
-
+    $response = Invoke-RestMethod $url -Method GET -Headers $headers
+    $reportId = $response.items | ? name -eq "Sustainability report" | % id
+    
 }
 catch {
     write-host "Error !" $error[0].Exception.Message -ForegroundColor Red
 }
 
-#endRegion
+# Get the date of the latest sustainability report
+$url = "$ConnectivityEndpoint/compute-ops/$reports_API_version/reports/$reportId" 
 
-#Region --------------------------------------------------Wait for the Sustainability Report to complete-----------------------------------------------------------------------------
+try {
+    $response = Invoke-RestMethod $url -Method GET -Headers $headers
+    $reportCreationDate = $response.createdAt
+    
+}
+catch {
+    write-host "Error !" $error[0].Exception.Message -ForegroundColor Red
+}
 
-# Wait for the task to complete
+# Run sustainability report only if not already executed today
 
-Start-Sleep 5
+$today = (Get-Date).Date
 
-$url = $ConnectivityEndpoint + $jobUri
+if ($reportCreationDate.Date -ne $today ) {
 
-do {
+    # Creation of the payload
+    $jobTemplateUri = "/api/compute/v1/job-templates/" + $jobtemplateId
+
+    $body = @{}
+    $body['jobTemplateUri'] = $jobTemplateUri
+    $body['resourceUri'] = $allfilterUri
+
+    $data = @{}
+    $data['reportType'] = "CARBON_FOOTPRINT"
+    $body['data'] = $data
+
+    $body = $body | ConvertTo-Json
+
+
+    $url = $ConnectivityEndpoint + '/api/compute/v1/jobs'
 
     try {
-        $status = Invoke-RestMethod $url -Method GET -Headers $headers
-        Start-Sleep 5
-  
+        $response = Invoke-RestMethod $url -Method POST -Body $Body -ContentType "application/json" -Headers $headers
+        $jobUri = $response.resourceUri
+        # $jobId = $response.id
+
     }
     catch {
         write-host "Error !" $error[0].Exception.Message -ForegroundColor Red
     }
+
+    # Wait for the Sustainability Report to complete
+        
+    Start-Sleep 5
+
+    $url = $ConnectivityEndpoint + $jobUri
+
+    do {
+
+        try {
+            $status = Invoke-RestMethod $url -Method GET -Headers $headers
+            Start-Sleep 5
     
-} until (  $status.state -eq "Complete" -or $status.state -eq "error" )
+        }
+        catch {
+            write-host "Error !" $error[0].Exception.Message -ForegroundColor Red
+        }
+        
+    } until (  $status.state -eq "Complete" -or $status.state -eq "error" )
 
-$reportUri = $status.results.location
-$reportId = $reportUri.Substring($reportUri.Length - 36)
+    $reportUri = $status.results.location
+    $reportId = $reportUri.Substring($reportUri.Length - 36)
 
 
-if ($status.state -eq "error") {
-    "Sustainability report creation failure! Status: {0}" -f $status.status
-    return
+    if ($status.state -eq "error") {
+        "Sustainability report creation failure! Status: {0}" -f $status.status
+        return
+    }
 }
 
 #endRegion
@@ -360,7 +385,7 @@ foreach ($serie in $reportData.data.series) {
     }
 }
 
-# --------------------------------------------------Output each servers-----------------------------------------------------
+# --------------------------------------------------Output individual server emissions-----------------------------------------------------
 
 foreach ($serie in ($reportData.data.series | Sort-Object { $_.subject.displayName } )) {
 
