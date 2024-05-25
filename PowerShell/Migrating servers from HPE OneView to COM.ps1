@@ -59,7 +59,7 @@ $CSV_File_Name_For_Migration_Status_Report = "Device_Migration_Result.csv"
 
 #Region Credentials
 ################## iLO credentials ################################################################################################################################################
-# $iLO_Password = "******"
+# $iLO_Password = "*****************"
 # ConvertTo-SecureString -String $iLO_Password -AsPlainText -Force |  ConvertFrom-SecureString   
 
 $iLO_Username = "Administrator"
@@ -76,7 +76,7 @@ $GLP_secpasswd = ConvertTo-SecureString $Encrypted_GLP_Password
 $GLP_credentials = New-Object System.Management.Automation.PSCredential ($GLP_userName, $GLP_secpasswd)
 
 ################## OneView credentials ################################################################################################################################################
-# $OV_password = "************"
+# $OV_password = "******************"
 # ConvertTo-SecureString -String $OV_password -AsPlainText -Force |  ConvertFrom-SecureString   
 $OV_userName = "Administrator"
 $OV_IP = "oneview.lj.lab"
@@ -88,7 +88,7 @@ $OV_credentials = New-Object System.Management.Automation.PSCredential ($OV_user
 #endRegion
 
 ################## HPE GreenLake Module ################################################################################################################################################
-import-module "C:\Users\jullienl\OneDrive - Hewlett Packard Enterprise\Projects\HPEGreenLake\HPEGreenLake.psd1" -force 
+import-module ".\HPEGreenLake\HPEGreenLake.psd1" -force 
 
 
 #----------------------------------------------------------Connection to HPE OneView ----------------------------------------------------------------------
