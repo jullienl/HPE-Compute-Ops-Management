@@ -250,7 +250,14 @@ catch {
 
 $today = (Get-Date).Date
 
-if ($reportCreationDate.Date -ne $today ) {
+# Read existing complete report from today (if any)
+if ($reportCreationDate.Date -eq $today -and $response.state -eq "Complete") {
+    Write-Verbose "Sustainability report already executed today!" 
+
+    $reportId = $response.id
+}
+# Create a new report
+else {
 
     # Creation of the payload
     $jobTemplateUri = "/api/compute/v1/job-templates/" + $jobtemplateId
@@ -266,7 +273,7 @@ if ($reportCreationDate.Date -ne $today ) {
     $body = $body | ConvertTo-Json
 
 
-    $url = $ConnectivityEndpoint + '/api/compute/v1/jobs'
+    $url = $ConnectivityEndpoint + '/compute-ops-mgmt/v1beta3/jobs'
 
     try {
         $response = Invoke-RestMethod $url -Method POST -Body $Body -ContentType "application/json" -Headers $headers
@@ -307,11 +314,12 @@ if ($reportCreationDate.Date -ne $today ) {
     }
 }
 
+
 #endRegion
 
 #Region --------------------------------------------------Capture Co2 emissions / energy consumption / energy cost for all + individual server---------------------------------------
       
-$url = $ConnectivityEndpoint + "/ui-doorway/compute/v2/reports/" + $reportId + "/data"
+$url = $ConnectivityEndpoint + "/compute-ops-mgmt/v1beta2/reports/" + $reportId + "/data"
 
 try {
     $reportData = Invoke-RestMethod $url -Method GET -Headers $headers
