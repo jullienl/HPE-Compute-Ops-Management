@@ -123,7 +123,7 @@
 
   - name: Collect all servers
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ servers_API_version }}/servers?limit=100"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ servers_API_version }}/servers?limit=100"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -142,7 +142,7 @@
 
   - name: Collect server by ID
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ servers_API_version }}/servers/{{ serverID }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ servers_API_version }}/servers/{{ serverID }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -153,7 +153,7 @@
 
   - name: Collect first 10 servers
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ servers_API_version }}/servers?limit=10"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ servers_API_version }}/servers?limit=10"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -167,7 +167,7 @@
 
   - name: List all activities
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ activities_API_version }}/activities"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ activities_API_version }}/activities"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -178,7 +178,7 @@
 
   - name: List last activity
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ activities_API_version }}/activities?limit=1"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ activities_API_version }}/activities?limit=1"
       method: GET
 
       headers:
@@ -193,7 +193,7 @@
 
   - name: List all firmware bundles
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ firmware_bundles_API_version }}/firmware-bundles"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ firmware_bundles_API_version }}/firmware-bundles"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -212,7 +212,7 @@
 
   - name: List firmware bundle 2022.03.0
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ firmware_bundles_API_version }}/firmware-bundles/{{ firmwarebundleID }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ firmware_bundles_API_version }}/firmware-bundles/{{ firmwarebundleID }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -226,7 +226,7 @@
 
   - name: List all groups
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -255,7 +255,7 @@
 
   - name: List group 'Production-Group'
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -266,7 +266,7 @@
 
   - name: Get the critical event notification status of a group
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}/notifications"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}/notifications"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -277,7 +277,7 @@
 
   - name: Modify the critical event notification status of a group
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}/notifications"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}/notifications"
       method: PUT
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -292,7 +292,7 @@
 
   - name: Create group Production-Group
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups"
       method: POST
       status_code: 201
       headers:
@@ -316,7 +316,7 @@
 
   - name: Modify a group 
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}"
       method: PATCH
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -332,7 +332,7 @@
 
   - name: Assigns devices to a group 
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}/devices"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}/devices"
       method: POST
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -350,7 +350,7 @@
 
   - name: Unassigns all devices from a group 
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}/devices?force=true"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}/devices?force=true"
       method: DELETE
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -361,7 +361,7 @@
 
   - name: Unassigns a device from a group 
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}/devices/P38471-B21+J208PP003O"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}/devices/P38471-B21+J208PP003O"
       method: DELETE
       status_code: 204
       headers:
@@ -374,9 +374,9 @@
   - name: Delete a group 
     # You cannot delete Group if servers are still assigned to the group. 
     # If you would like to remove all device and delete the group, provide the query parameter force=true
-    # like {{url}}/compute-ops/v1beta1/groups/{{group_id}}?force=true
+    # like {{url}}/compute-ops-mgmt/v1beta1/groups/{{group_id}}?force=true
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}"
       method: DELETE
       status_code: 204
       headers:
@@ -391,7 +391,7 @@
 
   - name: List all job templates
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ job_templates_API_version }}/job-templates"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ job_templates_API_version }}/job-templates"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -422,7 +422,7 @@
 
   - name: List all jobs
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ jobs_API_version }}/jobs"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ jobs_API_version }}/jobs"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -441,7 +441,7 @@
 
   - name: Collect job by ID
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ jobs_API_version }}/jobs/{{ jobID }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ jobs_API_version }}/jobs/{{ jobID }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -461,7 +461,7 @@
     # Warning: Firmware updates other than iLO FW may require a server reboot!
     # Note: To set schedule options during updates, you must create a schedule instead of a job
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ jobs_API_version }}/jobs"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ jobs_API_version }}/jobs"
       method: POST
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -484,7 +484,7 @@
 
   - name: List all schedules
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ schedules_API_version }}/schedules"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ schedules_API_version }}/schedules"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -503,7 +503,7 @@
 
   - name: Collect schedule by ID
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ schedules_API_version }}/schedules/{{ scheduleID }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ schedules_API_version }}/schedules/{{ scheduleID }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -514,7 +514,7 @@
 
   - name: Modify a schedule
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ schedules_API_version }}/schedules/{{ scheduleID }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ schedules_API_version }}/schedules/{{ scheduleID }}"
       method: PATCH
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -531,7 +531,7 @@
 
   - name: List all history of a schedule
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ schedules_API_version }}/schedules/{{ scheduleID }}/history"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ schedules_API_version }}/schedules/{{ scheduleID }}/history"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -542,7 +542,7 @@
   
   - name: Delete a schedule by ID
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ schedules_API_version }}/schedules/{{ scheduleID }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ schedules_API_version }}/schedules/{{ scheduleID }}"
       method: DELETE
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -552,7 +552,7 @@
     # Warning: Any updates other than iLO FW require a server reboot!
     # Note: To perform an immediate update, you must create a job instead of a schedule
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ schedules_API_version }}/schedules"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ schedules_API_version }}/schedules"
       method: POST
       headers:
         Authorization: "Bearer {{ access_token }}"

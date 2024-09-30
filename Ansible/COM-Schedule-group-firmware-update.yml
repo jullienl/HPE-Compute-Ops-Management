@@ -141,7 +141,7 @@
 
   - name: Retrieve all firmware bundles
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ firmware_bundles_API_version }}/firmware-bundles"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ firmware_bundles_API_version }}/firmware-bundles"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -159,7 +159,7 @@
 
   - name: Retrieve all groups
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -179,7 +179,7 @@
 
   - name: Retrieve group {{ GroupName }}
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -187,7 +187,7 @@
 
   - name: Modify the group if needed to set the defined baseline
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}"
       method: PATCH
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -202,7 +202,7 @@
 
   - name: Retrieve all job templates
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ job_templates_API_version }}/job-templates"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ job_templates_API_version }}/job-templates"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -237,7 +237,7 @@
     # Warning: Any updates other than iLO FW require a server reboot!
     # Note: To perform an immediate update, you must create a job instead of a schedule
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ schedules_API_version }}/schedules"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ schedules_API_version }}/schedules"
       method: POST
       headers:
         Authorization: "Bearer {{ access_token }}"

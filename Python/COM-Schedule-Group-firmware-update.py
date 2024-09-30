@@ -87,14 +87,14 @@ headers = {"Authorization": "Bearer " + AccessToken}
 
 
 # Retrieve firmware bundle id of the defined baseline
-bundles = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/firmware-bundles', headers=headers).json()
+bundles = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/firmware-bundles', headers=headers).json()
 bundleid = [fb for fb in bundles['items'] if fb['releaseVersion'] == Baseline][0]['id']
 if bundleid is None:
     warnings.warn("Error, firmware bundle '" + Baseline + "' not found!")
     exit()
 
 # Retrieve group id of the defined group name
-groups = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/groups', headers=headers).json()
+groups = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/groups', headers=headers).json()
 group = [group for group in groups['items'] if group['name'] == GroupName]
 groupid = group['id']
 if groupid is None:
@@ -106,7 +106,7 @@ body = {
   }
 
 headers["Content-Type"] = "application/merge-patch+json"
-response = requests.patch(url=ConnectivityEndpoint + "/compute-ops/" + APIversion + "/groups/" + groupid, headers=headers, body=body)
+response = requests.patch(url=ConnectivityEndpoint + "/compute-ops-mgmt/" + APIversion + "/groups/" + groupid, headers=headers, body=body)
 print(f"Group '{GroupName}' modification to use SPP '{Baseline}' - Status: {response['StatusDescription']}")
 
 
@@ -120,15 +120,15 @@ schedulename = "Firmware upgrade for group DL360Gen10plus-Production-Group"
 description = "Upgrade to SPP 2022.03.0"
 interval = "null" # Can be P7D for 7 days intervals, P15m, P1M, P1Y
 
-jobtemplates = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/job-templates', headers=headers).json() 
+jobtemplates = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/job-templates', headers=headers).json() 
 jobTemplateid = [jt for jt in jobtemplates['items'] if jt['name'] == 'GroupFirmwareUpdate']['id']
 if jobTemplateid is None:
     warnings.warn("Error, job template 'GroupFirmwareUpdate' not found!")
     exit()
 
-groups = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/groups', headers=headers).json()
+groups = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/groups', headers=headers).json()
 groupid = [group for group in groups['items'] if group['name'] == GroupName]['id']
-bundles = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/firmware-bundles', headers=headers).json()
+bundles = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/firmware-bundles', headers=headers).json()
 bundleid = [fb for fb in bundles['items'] if fb['releaseVersion'] == '2022.03.0'][0]['id']
 group = [group for group in groups['items'] if group['name'] == GroupName]
 deviceids = [ server[id] for server in group['devices']]
@@ -160,9 +160,9 @@ body = {
 }
 
 headers["Content-Type"] = "application/json"
-response = requests.post(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/schedules', headers=headers, body=body) 
+response = requests.post(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/schedules', headers=headers, body=body) 
 scheduleid = response.json()['id']
 
 # Get details about newly created schedule
-print(requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/schedules/' + scheduleid, headers=headers).json())
-print(requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/schedules/' + scheduleid, headers=headers).json()['operation']['body']['data'])
+print(requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/schedules/' + scheduleid, headers=headers).json())
+print(requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/schedules/' + scheduleid, headers=headers).json()['operation']['body']['data'])

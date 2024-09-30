@@ -185,7 +185,7 @@ $headers["Authorization"] = "Bearer $AccessToken"
 # Retrieve job template id of DataRoundupReportOrchestrator
 
 try {
-    $jobtemplates = Invoke-RestMethod "$ConnectivityEndpoint/compute-ops/$servers_API_version/job-templates" -Method GET -Headers $headers
+    $jobtemplates = Invoke-RestMethod "$ConnectivityEndpoint/compute-ops-mgmt/$servers_API_version/job-templates" -Method GET -Headers $headers
 
 }
 catch {
@@ -193,7 +193,7 @@ catch {
 }
 
 
-$jobtemplateId = $jobtemplates.items  | ? name -eq 'DataRoundupReportOrchestrator' | % id
+$jobtemplateId = $jobtemplates.items | ? name -eq 'DataRoundupReportOrchestrator' | % id
 
 if (! $jobtemplateId) {
     Write-Error  "Error, job template 'DataRoundupReportOrchestrator' not found!"
@@ -204,14 +204,14 @@ if (! $jobtemplateId) {
 # Retrieve 'all servers' filter
 
 try {
-    $filters = Invoke-RestMethod "$ConnectivityEndpoint/compute-ops/$filters_API_version/filters" -Method GET -Headers $headers
+    $filters = Invoke-RestMethod "$ConnectivityEndpoint/compute-ops-mgmt/$filters_API_version/filters" -Method GET -Headers $headers
 
 }
 catch {
     write-host "Authentication error !" $error[0].Exception.Message -ForegroundColor Red
 }
 
-$allfilterUri = $filters.items  | ? name -eq 'All Servers' | % resourceUri
+$allfilterUri = $filters.items | ? name -eq 'All Servers' | % resourceUri
 
 if (! $allfilterUri) {
     Write-Error  "Error, filter 'All Servers' not found!"
@@ -223,7 +223,7 @@ if (! $allfilterUri) {
 #Region --------------------------------------------------Create a Sustainability Report for all servers-----------------------------------------------------------------------------
 
 # Get all COM reports
-$url = "$ConnectivityEndpoint/compute-ops/$reports_API_version/reports" 
+$url = "$ConnectivityEndpoint/compute-ops-mgmt/$reports_API_version/reports" 
 
 try {
     $response = Invoke-RestMethod $url -Method GET -Headers $headers
@@ -235,7 +235,7 @@ catch {
 }
 
 # Get the date of the latest sustainability report
-$url = "$ConnectivityEndpoint/compute-ops/$reports_API_version/reports/$reportId" 
+$url = "$ConnectivityEndpoint/compute-ops-mgmt/$reports_API_version/reports/$reportId" 
 
 try {
     $response = Invoke-RestMethod $url -Method GET -Headers $headers

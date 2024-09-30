@@ -175,7 +175,7 @@ catch {
 
 
 # Capturing API Access Token
-$AccessToken = ($response.Content  | Convertfrom-Json).access_token
+$AccessToken = ($response.Content | Convertfrom-Json).access_token
 
 # Headers creation
 $headers = @{} 
@@ -188,7 +188,7 @@ $headers["Authorization"] = "Bearer $AccessToken"
 #region Set group server settings with defined SPP
 
 # Retrieve job template resourceUri of GroupFirmwareUpdate
-$jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
+$jobTemplateUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops-mgmt/$job_templates_API_version/job-templates" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq "GroupFirmwareUpdate").resourceUri
 
 if (-not  $jobTemplateUri) {
   write-warning "Error, job template 'GroupFirmwareUpdate' not found!"
@@ -196,7 +196,7 @@ if (-not  $jobTemplateUri) {
 }
 
 # Retrieve group Uri of the defined group name
-$groupUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).resourceUri
+$groupUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops-mgmt/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).resourceUri
 
 if (-not  $groupUri) {
   write-warning "Error, group name '$groupname' not found!"
@@ -204,7 +204,7 @@ if (-not  $groupUri) {
 }
 
 # Retrieve firmware bundle id of the defined baseline
-$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq $Baseline | ForEach-Object id
+$bundleid = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops-mgmt/$firmware_bundles_API_version/firmware-bundles" -Method GET -Headers $headers).content | ConvertFrom-Json).items | Where-Object releaseVersion -eq $Baseline | ForEach-Object id
 
 if (-not $bundleid ) {
   write-warning "Error, firmware bundle '$baseline' not found!"
@@ -212,7 +212,7 @@ if (-not $bundleid ) {
 }
 
 # Retrieve group Server settings 
-$serverSettingsUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).serverSettingsUris 
+$serverSettingsUri = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops-mgmt/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).serverSettingsUris 
 
 # Set group server settings to use defined SPP
 ## Creation of the payload
@@ -253,7 +253,7 @@ catch {
 
 # Retrieve group device IDs 
 ## The list of devices must be provided even if they are already part of the group!
-$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).devices.id 
+$deviceids = (((Invoke-webrequest "$ConnectivityEndpoint/compute-ops-mgmt/$groups_API_version/groups" -Method GET -Headers $headers).Content | ConvertFrom-Json).items | ? name -eq $GroupName).devices.id 
 
 if ($deviceids.count -eq 1) {
   $devicesformatted = ConvertTo-Json  @("$deviceids")
@@ -286,7 +286,7 @@ $headers["Content-Type"] = "application/json"
 
 
 try {
-  $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$jobs_API_version/jobs" -Method POST -Headers $headers -Body $body -ErrorAction Stop
+  $response = Invoke-webrequest "$ConnectivityEndpoint/compute-ops-mgmt/$jobs_API_version/jobs" -Method POST -Headers $headers -Body $body -ErrorAction Stop
   
 }
 catch {
@@ -357,7 +357,7 @@ else {
     foreach ($deviceid in $deviceids) {
    
       $FWupgradestatus = (((Invoke-webrequest "$ConnectivityEndpoint/api/compute/v1/activities?count=20&sort=createdAt:desc" -Method GET -Headers $headers).content | convertfrom-json).items | ? associatedServerId -eq $deviceid) 
-      $server = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json)
+      $server = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops-mgmt/$servers_API_version/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json)
   
       if ( $FWupgradestatus[0].key -match "SERVER_JOB_FW_UPDATE_IN_PROGRESS" -and [datetime]$FWupgradestatus[0].updatedAt -gt $(get-variable FWupgradestatusupdatedAt_$i -ValueOnly) ) {
         
@@ -386,7 +386,7 @@ else {
   foreach ($deviceid in $deviceids) {
 
     $FWupgradestatus = (((Invoke-webrequest "$ConnectivityEndpoint/api/compute/v1/activities?count=20&sort=createdAt:desc" -Method GET -Headers $headers).content | convertfrom-json).items | ? associatedServerId -eq $deviceid) 
-    $server = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops/$servers_API_version/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json)
+    $server = ((Invoke-webrequest "$ConnectivityEndpoint/compute-ops-mgmt/$servers_API_version/servers/$deviceid" -Method GET -Headers $headers).content | ConvertFrom-Json)
     
     if ( $FWupgradestatus[0].key -match "SERVER_JOB_FW_UPDATE_COMPLETED") {
 

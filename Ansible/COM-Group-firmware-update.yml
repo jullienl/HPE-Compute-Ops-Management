@@ -138,7 +138,7 @@
 
   - name: Retrieve all firmware bundles
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ firmware_bundles_API_version }}/firmware-bundles"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ firmware_bundles_API_version }}/firmware-bundles"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -156,7 +156,7 @@
 
   - name: Retrieve all groups
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -184,7 +184,7 @@
 
   - name: Retrieve group {{ GroupName }}
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ groups_API_version }}/groups/{{ groupid }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ groups_API_version }}/groups/{{ groupid }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -192,7 +192,7 @@
  
   - name: Retrieve all job templates
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ job_templates_API_version }}/job-templates"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ job_templates_API_version }}/job-templates"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -221,7 +221,7 @@
     # Warning: Any updates other than iLO FW require a server reboot!
     # Note: To set schedule options during updates, you must create a schedule instead of a job
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ jobs_API_version }}/jobs"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ jobs_API_version }}/jobs"
       method: POST
       headers:
         Authorization: "Bearer {{ access_token }}"
@@ -285,7 +285,7 @@
 
   - name: Get the update report for the servers in the group after the update is complete
     uri:
-      url: "{{ ConnectivityEndpoint }}/compute-ops/{{ servers_API_version }}/servers/{{ item }}"
+      url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ servers_API_version }}/servers/{{ item }}"
       method: GET
       headers:
         Authorization: "Bearer {{ access_token }}"

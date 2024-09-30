@@ -484,7 +484,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "${url}/compute-ops/v1beta2/servers?limit=100",
+          "url": "${url}/compute-ops-mgmt/v1beta2/servers?limit=100",
           "url_options": {
             "data": "",
             "headers": [
@@ -571,7 +571,7 @@
           "root_selector": "$",
           "source": "url",
           "type": "json",
-          "url": "${url}/compute-ops/v1beta2/servers",
+          "url": "${url}/compute-ops-mgmt/v1beta2/servers",
           "url_options": {
             "data": "",
             "headers": [
@@ -659,7 +659,7 @@
           "root_selector": "$",
           "source": "url",
           "type": "json",
-          "url": "${url}/compute-ops/v1beta2/firmware-bundles",
+          "url": "${url}/compute-ops-mgmt/v1beta2/firmware-bundles",
           "url_options": {
             "data": "",
             "headers": [
@@ -761,7 +761,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "${url}/compute-ops/v1beta2/firmware-bundles",
+          "url": "${url}/compute-ops-mgmt/v1beta2/firmware-bundles",
           "url_options": {
             "data": "",
             "headers": [
@@ -844,7 +844,7 @@
           "root_selector": "",
           "source": "url",
           "type": "json",
-          "url": "${url}/compute-ops/v1beta2/groups",
+          "url": "${url}/compute-ops-mgmt/v1beta2/groups",
           "url_options": {
             "data": "",
             "headers": [
@@ -1033,7 +1033,7 @@
           "type": "yesoreyeram-infinity-datasource",
           "uid": "${DS_INFINITY-COM}"
         },
-        "definition": "Infinity-COM- (infinity) ${url}/compute-ops/v1beta1/reports",
+        "definition": "Infinity-COM- (infinity) ${url}/compute-ops-mgmt/v1beta1/reports",
         "hide": 2,
         "includeAll": false,
         "multi": false,
@@ -1054,7 +1054,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "${url}/compute-ops/v1beta1/reports",
+            "url": "${url}/compute-ops-mgmt/v1beta1/reports",
             "url_options": {
               "data": "",
               "headers": [
@@ -1066,7 +1066,7 @@
               "method": "GET"
             }
           },
-          "query": "${url}/compute-ops/v1beta1/reports",
+          "query": "${url}/compute-ops-mgmt/v1beta1/reports",
           "queryType": "infinity"
         },
         "refresh": 1,

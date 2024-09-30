@@ -89,14 +89,14 @@ headers = {"Authorization": "Bearer " + AccessToken}
 ## Note: To set schedule options during updates, you must create a schedule instead of a job
 
 # Retrieve job template id of GroupFirmwareUpdate
-jobtemplates = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/job-templates', headers=headers).json() 
+jobtemplates = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/job-templates', headers=headers).json() 
 jobtemplateUri = [jt for jt in jobtemplates['items'] if jt['name'] == 'GroupFirmwareUpdate']['resourceUri']
 if jobtemplateUri is None:
     warnings.warn("Error, job template 'GroupFirmwareUpdate' not found!")
     exit()
 
 # Retrieve group uri of the defined group name
-groups = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/groups', headers=headers).json()
+groups = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/groups', headers=headers).json()
 group = [group for group in groups['items'] if group['name'] == GroupName]
 resourceUri = group['resourceUri']
 if resourceUri is None:
@@ -104,7 +104,7 @@ if resourceUri is None:
     exit()
 
 # Retrieve firmware bundle id of the defined baseline
-bundles = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/firmware-bundles', headers=headers).json()
+bundles = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/firmware-bundles', headers=headers).json()
 bundleid = [fb for fb in bundles['items'] if fb['releaseVersion'] == Baseline][0]['id']
 if bundleid is None:
     warnings.warn("Error, firmware bundle '" + Baseline + "' not found!")
@@ -126,7 +126,7 @@ body = {
 
 # Creation of the request
 headers["Content-Type"] = "application/json"
-response = requests.post(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/jobs', headers=headers, body=body) 
+response = requests.post(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/jobs', headers=headers, body=body) 
 jobUri = response.json()['resourceUri']
 
 ## Wait for the task to start or fail
@@ -152,7 +152,7 @@ else :
 
   # Get the update report for the servers in the group after the update is complete if lastFirmwareUpdate is defined 
   for deviceid in deviceids:
-   server = requests.get(url=ConnectivityEndpoint + '/compute-ops/' + APIversion + '/servers/' + deviceid, headers=headers)['content']
+   server = requests.get(url=ConnectivityEndpoint + '/compute-ops-mgmt/' + APIversion + '/servers/' + deviceid, headers=headers)['content']
    if server['lastFirmwareUpdate'] is not None:
     print(f"Server: {server['name']} - Report status: {server['lastFirmwareUpdate']['status']}")
    else:
