@@ -2,13 +2,13 @@
 
 This PowerShell script automates the process of connecting HPE Gen10 and later servers to HPE Compute Ops Management (COM). It also allows you to prepare and configure iLO settings, such as DNS, NTP, and firmware updates, before connecting the servers to COM.
 
-This preparation is essential to ensure that iLOs are ready for Compute Ops Management and can effectively communicate and be managed by the platform. It includes:
+This preparation is essential to ensure that iLOs are ready for COM and can effectively communicate and be managed by the platform. It includes:
 
 - **Setting up DNS**: To ensure iLO can reach the cloud platform
 - **Setting up NTP**: To ensure the date and time of iLO are correct
 - **Updating iLO firmware**: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, or iLO6 1.64 or later).
 
-The script requires a CSV file that contains the list of iLO IP addresses or resolvable hostnames to be connected to HPE Compute Ops Management.
+The script requires a CSV file that contains the list of iLO IP addresses or resolvable hostnames to be connected to COM.
 
 This CSV file must have the following format:
 
@@ -24,20 +24,20 @@ IP
 
 To see a demonstration of this script in action, watch the following video: 
 
-[![Efficient Bare Metal Provisioning for Windows Server with HPE Compute Ops Management and Ansible](https://img.youtube.com/vi/ZV0bmqmODmU/0.jpg)](https://youtu.be/ZV0bmqmODmU)
+[![Preparing and connecting HPE Servers to Compute Ops Management with PowerShell](https://img.youtube.com/vi/ZV0bmqmODmU/0.jpg)](https://youtu.be/ZV0bmqmODmU)
 
 The script performs the following actions:
 
 1. Connects to HPE GreenLake.
-2. Checks the Compute Ops Management instance.
-3. Checks the Compute Ops Management subscription.
-4. Generates a Compute Ops Management activation key.
+2. Checks the COM instance.
+3. Checks the COM subscription.
+4. Generates a COM activation key.
 5. Prepares and configures iLO settings:
-    - DNS: Sets DNS servers (if specified).
-    - SNTP: Sets SNTP servers (if specified).
-    - Firmware update: Ensures the iLO firmware meets the COM minimum requirement to support onboarding via COM activation key.
+    - DNS: Sets DNS servers (if specified) to ensure iLOs can reach the cloud platform
+    - SNTP: Sets SNTP servers (if specified) to ensure the date and time of iLOs are correct, crucial for securing the mutual TLS (mTLS) connections between COM and iLO.
+    - Firmware: Updates iLO firmware (if needed) to ensure the iLO firmware meets the COM minimum requirement to support onboarding via COM activation key.
         - If the minimum firmware is not met, the script updates the firmware using the iLO firmware flash file specified.
-6. Connects iLOs to Compute Ops Management with the following options:
+6. Connects iLOs to COM with the following options:
     - Connects iLOs directly (if no proxy settings are specified).
     - Connects iLOs via a web proxy or secure gateway (if specified).
     - Connects iLOs via a web proxy and credentials (if specified).
@@ -50,7 +50,7 @@ The script can be run with the following parameters:
 
 - `Check`: Switch to check the COM instance, subscription, location, and iLO settings without making any changes to the iLO settings. Useful for pre-checking before onboarding.
 - `SkipCertificateValidation`: Switch to bypass certificate validation when connecting to iLO. Use with caution. This switch is only intended to be used against known hosts using a self-signed certificate.
-- `DisconnectiLOfromOneView`: Switch to disconnect the iLO from HPE OneView before onboarding to HPE Compute Ops Management.
+- `DisconnectiLOfromOneView`: Switch to disconnect the iLO from HPE OneView before onboarding to COM.
 - `Verbose`: Switch to enable verbose output.
 
 **Note:** The script requires the HPEiLOCmdlets and HPECOMCmdlets PowerShell modules to connect to iLOs and HPE GreenLake, respectively. The two modules are automatically installed if not already present.
@@ -61,14 +61,14 @@ The script can be run with the following parameters:
 - HPEiLOCmdlets PowerShell module to connect to iLOs (automatically installed if not already present).
 - HPECOMCmdlets PowerShell module to connect to HPE GreenLake (automatically installed if not already present).
 - Network access to both HPE GreenLake and the HPE iLOs.
-- The servers you want to add and configure are not assigned to other Compute Ops Management service instances in the same workspace or a different workspace.
+- The servers you want to add and configure are not assigned to other COM service instances in the same workspace or a different workspace.
 - HPE GreenLake user account:
   - With the HPE GreenLake Workspace Administrator or Workspace Operator role.
   - If you use custom HPE GreenLake roles, ensure that the user account has the HPE GreenLake Devices and Subscription Service Edit permission.
   - With the Compute Ops Management Administrator or Operator role.
 - HPE GreenLake already set up with:
-  - A workspace where a Compute Ops Management service instance is provisioned.
-  - A Compute Ops Management subscription with enough licenses to support the number of iLOs defined in the CSV file.
+  - A workspace where a COM service instance is provisioned.
+  - A COM subscription with enough licenses to support the number of iLOs defined in the CSV file.
   - A location to support automated HPE support case creation and services.
 - iLO correctly set and accessible from the network with:
   - An IP address
@@ -85,12 +85,12 @@ The script can be run with the following parameters:
     - SNTP servers to configure in iLO (optional).
     - iLO Web Proxy or Secure Gateway settings (optional).
     - HPE GreenLake account with HPE GreenLake and Compute Ops Management administrative privileges.
-    - HPE GreenLake workspace name where the Compute Ops Management instance is provisioned.
-    - Region where the Compute Ops Management instance is provisioned.
+    - HPE GreenLake workspace name where the COM instance is provisioned.
+    - Region where the COM instance is provisioned.
     - Location name where the devices will be assigned (optional).
     - Tags to assign to devices (optional).
 2. Run the script in a PowerShell 7 environment.
-3. Review the output to ensure that the iLOs are successfully connected to HPE Compute Ops Management.
+3. Review the output to ensure that the iLOs are successfully connected to COM.
 
 **Note:** The script can be run multiple times with different CSV files to assign different tags or locations to servers.
 
@@ -285,6 +285,6 @@ The status of the operation has been exported to 'Z:\Onboarding\iLO_Onboarding_S
 Hit return to close:
 ```
 
-**Note:** The script generates a CSV file with the status of the operation, including the iLO IP address, hostname, serial number, iLO generation, iLO firmware version, server model, and the status of the configuration and connection to Compute Ops Management.
+**Note:** The script generates a CSV file with the status of the operation, including the iLO IP address, hostname, serial number, iLO generation, iLO firmware version, server model, and the status of the configuration and connection to COM.
 
 **Disclaimer:** The script is provided as-is and is not officially supported by HPE. It is recommended to test the script in a non-production environment before running it in a production environment. 
