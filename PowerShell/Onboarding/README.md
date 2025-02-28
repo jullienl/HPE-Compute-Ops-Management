@@ -12,7 +12,7 @@ The script requires a CSV file that contains the list of iLO IP addresses or res
 
 This CSV file must have the following format:
 
-```
+```cs
 IP
 192.168.0.100
 192.168.0.101
