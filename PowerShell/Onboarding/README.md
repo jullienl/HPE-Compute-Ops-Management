@@ -190,6 +190,7 @@ Hit return to close:
 ```
 Enter password for iLO account 'admin': ********
 Enter password for your HPE GreenLake account 'email@domain.com': ********
+
 [Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
 [Workspace: HPE Mougins] - COM instance 'eu-central' successfully found.
 [Workspace: HPE Mougins] - Sufficient licenses available (19) for the number of iLOs (3).                               
