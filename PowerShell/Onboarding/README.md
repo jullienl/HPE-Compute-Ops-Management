@@ -96,7 +96,7 @@ The script can be run with the following parameters:
 
 **Example 1: Pre-checking before onboarding**
 
-```powershell
+```
 .\Prepare-and-Connect-iLOs-to-COM.ps1 -Check
 ```
 
@@ -181,7 +181,7 @@ Hit return to close:
 
 **Example 2: Onboarding**
 
-```powershell
+```
 .\Prepare-and-Connect-iLOs-to-COM.ps1  
 ```
 
