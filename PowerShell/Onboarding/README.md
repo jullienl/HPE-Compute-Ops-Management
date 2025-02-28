@@ -5,7 +5,7 @@ This PowerShell script automates the process of connecting HPE Gen10 and later s
 This preparation is essential to ensure that iLOs are ready for COM and can effectively communicate and be managed by the platform. It includes:
 
 - **Setting up DNS**: To ensure iLO can reach the cloud platform
-- **Setting up NTP**: To ensure the date and time of iLO are correct
+- **Setting up NTP**: To ensure the date and time of iLO are correct, crucial for securing the mutual TLS (mTLS) connections between COM and iLO.
 - **Updating iLO firmware**: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, or iLO6 1.64 or later).
 
 The script requires a CSV file that contains the list of iLO IP addresses or resolvable hostnames to be connected to COM.
