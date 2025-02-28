@@ -98,7 +98,7 @@ The script can be run with the following parameters:
 **Output:**
 ```
 
-    Enter password for iLO account 'admin': ********
+    Enter password for iLO account 'administrator': ********
     Enter password for your HPE GreenLake account 'email@domain.com': ********
     [Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
 
@@ -183,7 +183,7 @@ The script can be run with the following parameters:
 
 **Output:**
 ```
-    Enter password for iLO account 'admin': ********
+    Enter password for iLO account 'administrator': ********
     Enter password for your HPE GreenLake account 'email@domain.com': ********
     [Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
     [Workspace: HPE Mougins] - COM instance 'eu-central' successfully found.
@@ -341,7 +341,7 @@ $iLO5binFile = "Z:\Onboarding\ilo5_309.bin"
 $iLO6binFile = "Z:\Onboarding\ilo6_166.bin"
 
 # Username of the iLO account
-$iLOUserName = "demopaq"
+$iLOUserName = "administrator"
 
 # DNS servers to configure in iLO (optional)
 $DNSservers = , @("192.168.2.1", "192.168.2.3")
