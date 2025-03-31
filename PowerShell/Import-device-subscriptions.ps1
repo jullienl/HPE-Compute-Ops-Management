@@ -4,33 +4,31 @@ This PowerShell script automates the process of importing device subscriptions i
 
 The script requires an XLSX file containing a list of HPE GreenLake subscription keys to be imported. The file must include a column named "License Key" with the subscription keys.
 
-**Requirements:**
-- PowerShell 7.
-- HPECOMCmdlets PowerShell module (automatically installed if not already present).
-- An XLSX file containing HPE GreenLake subscription keys. The file must include a column named "License Key" with the subscription keys.
-- Network access to HPE GreenLake.
-- HPE GreenLake user account:
-    - With the Workspace Administrator or Workspace Operator role.
-    - If using custom roles, ensure the account has the "Devices and Subscription Service Edit" permission.
-- HPE GreenLake workspace already set up.
+Requirements:
+    - PowerShell 7.x or later.
+    - HPECOMCmdlets PowerShell module (automatically installed if not already present).
+    - An XLSX file containing HPE GreenLake subscription keys. The file must include a column named "License Key" with the subscription keys.
+    - Network access to HPE GreenLake.
+    - HPE GreenLake user account:
+        - With the Workspace Administrator or Workspace Operator role.
+        - If using custom roles, ensure the account has the "Devices and Subscription Service Edit" permission.
+    - HPE GreenLake workspace already set up.
 
-**Usage Instructions:**
-1. Run the script in a PowerShell 7 environment with the following parameters:
-        - `HPEAccount`: Your HPE GreenLake account email.
-        - `WorkspaceName`: The name of the HPE GreenLake workspace to connect to.
-        - `Path`: The path to the XLSX file containing the subscription keys.
-2. The script will prompt you to enter your HPE GreenLake account password.
-3. Review the output to verify that the subscriptions were successfully imported into HPE GreenLake.
+Usage Instructions:
+    1. Run the script in a PowerShell 7 environment with the following parameters:
+            - `HPEAccount`: Your HPE GreenLake account email.
+            - `WorkspaceName`: The name of the HPE GreenLake workspace to connect to.
+            - `Path`: The path to the XLSX file containing the subscription keys.
+    2. The script will prompt you to enter your HPE GreenLake account password.
+    3. Review the output to verify that the subscriptions were successfully imported into HPE GreenLake.
 
 
-**Example**
+Example: 
 
-```powershell
-& '.\Import device subscriptions.ps1' -HPEAccount 'email@domain.com' -WorkspaceName 'HPE Mougins' -Path 'Z:\Projects\Gen11 COM Subscriptions.xlsx'
-```
+& '.\Import-device-subscriptions.ps1' -HPEAccount 'email@domain.com' -WorkspaceName 'HPE Mougins' -Path 'Z:\Gen11 COM Subscriptions.xlsx'
 
-**Output:**
-```
+Output:
+
     [Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
     
     [Workspace: HPE Mougins] - Subscription '1234567890' added successfully.
@@ -38,9 +36,8 @@ The script requires an XLSX file containing a list of HPE GreenLake subscription
     [Workspace: HPE Mougins] - Subscription 'abcdefghij' failed to be added - Details: Subscription already exists in the workspace! No action needed.
     Hit return to close:
 
-```
 
-**Disclaimer:** The script is provided as-is and is not officially supported by HPE. It is recommended to test the script in a non-production environment before running it in a production environment. Use the script at your own risk.
+Disclaimer: The script is provided as-is and is not officially supported by HPE. It is recommended to test the script in a non-production environment before running it in a production environment. Use the script at your own risk.
 
 
   Author: lionel.jullien@hpe.com
