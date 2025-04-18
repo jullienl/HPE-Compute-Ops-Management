@@ -297,7 +297,7 @@ Disclaimer: The script is provided as-is and is not officially supported by HPE.
 
   Author: lionel.jullien@hpe.com
   Date:   Feb 2025
-  Script source: https://github.com/jullienl/HPE-Compute-Ops-Management/blob/main/PowerShell/Onboarding/Prepare-and-Connect-iLOs-to-COM.ps1
+  Script source: https://github.com/jullienl/HPE-Compute-Ops-Management/blob/main/PowerShell/Onboarding/Prepare-and-Connect-iLOs-to-COM-v2.ps1
     
 #################################################################################
 #        (C) Copyright 2017 Hewlett Packard Enterprise Development LP           #
