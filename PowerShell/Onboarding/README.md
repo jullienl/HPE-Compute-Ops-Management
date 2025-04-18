@@ -1,6 +1,9 @@
 # HPE Compute Ops Management Onboarding Script
 
+
 This PowerShell script automates the process of connecting HPE Gen10 and later servers to HPE Compute Ops Management (COM). It also allows you to prepare and configure iLO settings, such as DNS, NTP, and firmware updates, before connecting the servers to COM.
+
+**Note**: Make sure to use the latest version: **v2**
 
 This preparation is essential to ensure that iLOs are ready for COM and can effectively communicate and be managed by the platform. It includes:
 
