@@ -21,6 +21,7 @@ IP
 ```
 
 Note: The first line is the header and must be "IP".
+Note: This script requires all iLOs to use the same iLO account username and password.
 
 To see a demonstration of this script in action, watch the following video: https://youtu.be/ZV0bmqmODmU.
 
@@ -55,14 +56,21 @@ Note: The script requires the HPEiLOCmdlets and HPECOMCmdlets PowerShell modules
 
 Requirements:
 - PowerShell 7 (versions lower than 7.5.0 due to a known issue with the HPEiLOCmdlets module with .NET SDK 9 used in versions 7.5.0 and later).
-- HPEiLOCmdlets PowerShell module to connect to iLOs (automatically installed if not already present).
-- HPECOMCmdlets PowerShell module to connect to HPE GreenLake (automatically installed if not already present).
+- PowerShell Modules:
+  - HPEiLOCmdlets (https://www.powershellgallery.com/packages/HPEiLOCmdlets)
+    - Used to connect to iLOs and perform iLO configuration tasks.
+    - Automatically installed if not already present.
+    - Authenticity and integrity of the module are verified before use.
+  - HPECOMCmdlets (https://www.powershellgallery.com/packages/HPECOMCmdlets)
+    - Used to connect to HPE GreenLake and COM and to perform configuration tasks.
+    - Automatically installed if not already present.
+    - Authenticity and integrity of the module are verified before use.
 - Network access to both HPE GreenLake and the HPE iLOs.
 - The servers you want to add and configure are not assigned to other COM service instances in the same workspace or a different workspace.
 - HPE GreenLake user account:
   - With the HPE GreenLake Workspace Administrator or Workspace Operator role.
   - If you use custom HPE GreenLake roles, ensure that the user account has the HPE GreenLake Devices and Subscription Service Edit permission.
-  - With the Compute Ops Management Administrator or Operator role.
+  - With the COM Administrator or Operator role.
 - HPE GreenLake already set up with:
   - A workspace where a COM service instance is provisioned.
   - A COM subscription with enough licenses to support the number of iLOs defined in the CSV file.
@@ -81,7 +89,7 @@ How to use:
     - DNS servers to configure in iLO (optional).
     - SNTP servers to configure in iLO (optional).
     - iLO Web Proxy or Secure Gateway settings (optional). Note that you cannot use both web proxy variables and Secure Gateway variables simultaneously! 
-    - HPE GreenLake account with HPE GreenLake and Compute Ops Management administrative privileges.
+    - HPE GreenLake account with HPE GreenLake and COM administrative privileges.
     - HPE GreenLake workspace name where the COM instance is provisioned.
     - Region where the COM instance is provisioned.
     - Location name where the devices will be assigned (optional).
@@ -459,8 +467,6 @@ If (-not (Get-Module HPEiLOCmdlets -ListAvailable)) {
         Read-Host "Hit return to close"
         exit
     }
-
-    Import-Module HPEiLOCmdlets
 }
 else {
     $installedModuleVersion = [version](Get-Module HPEiLOCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 | Select-Object -ExpandProperty Version)
@@ -478,7 +484,6 @@ else {
             exit
         }
     }
-    Import-Module HPEiLOCmdlets
 }
 
 # Check if HPECOMCmdlets module is installed and ensure the latest version is installed
@@ -492,7 +497,6 @@ If (-not (Get-Module HPECOMCmdlets -ListAvailable)) {
         Read-Host "Hit return to close"
         exit
     }
-    Import-Module HPECOMCmdlets
 }
 else {
     $installedModuleVersion = [version](Get-Module HPECOMCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 | Select-Object -ExpandProperty Version)
@@ -511,8 +515,265 @@ else {
             exit
         }
     }
-    Import-Module HPECOMCmdlets
 }
+
+#EndRegion
+
+#Region -------------------------------------------------------- Verification of the HPEiLOCmdlets module's authenticity and integrity before use. --------------------------------------------------------------------------------------------
+
+# Ensure the module is installed
+$module = Get-Module -Name HPEiLOCmdlets -ListAvailable
+if (-not $module) {
+    "'HPEiLOCmdlets' module is not installed. Please install it using 'Install-Module -Name HPEiLOCmdlets'." | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+# Get module path
+$modulePath = (Get-Module -Name HPEiLOCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 ).ModuleBase
+
+if (-not (Test-Path $modulePath)) {
+    "Module path not found: {0}" -f $modulePath | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+# Check module metadata
+$psd1Path = Join-Path $modulePath "HPEiLOCmdlets.psd1"
+if (-not (Test-Path $psd1Path)) {
+    "Module manifest (.psd1) not found at: {0}" -f $psd1Path | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+$metadata = Import-PowerShellDataFile -Path $psd1Path
+if ($metadata.CompanyName -notlike "*Hewlett Packard Enterprise*" -and $metadata.Author -notlike "*Hewlett Packard Enterprise*") {
+    "Module metadata does not match HPE. CompanyName: {0}, Author: {1}" -f $metadata.CompanyName, $metadata.Author | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+# Get all relevant module files (.psm1, .psd1, .dll)
+$files = Get-ChildItem -Path $modulePath -Recurse -Include *.psm1, *.psd1, *.ps1xml, *.dll -ErrorAction SilentlyContinue
+if (-not $files) {
+    "No relevant module files (.psm1, .psd1, .ps1xml, .dll) found in: {0}" -f $modulePath | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+# Verify digital signatures and certificates
+foreach ($file in $files) {
+
+    # Skip log4net.dll file
+    # log4net.dll is a third-party library used by HPEiLOCmdlets and is not signed by HPE but by Microsoft.
+    if ($file.Name -eq "log4net.dll") {
+        continue
+    }
+
+    "`nVerifying file: " | Write-Host -NoNewline
+    "$($file.Name)" | Write-Host -f Cyan
+    
+    # Check digital signature
+    $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+    if ($signature.Status -ne "Valid") {
+        "Signature: " | Write-Host -NoNewline
+        "{0}" -f $signature.Status | Write-Host -f Red
+        "Signature is not valid. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit
+    }
+    else {
+        "Signature: " | Write-Host -NoNewline
+        "{0}" -f $signature.Status | Write-Host -f Green
+    }
+
+    # Verify signer is HPE
+    if ($signature.SignerCertificate.Subject -notlike "*Hewlett Packard Enterprise*") {
+        "Signer: " | Write-Host -NoNewline
+        "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Red
+        "The module is not signed by Hewlett Packard Enterprise (HPE). Aborting operation for security reasons." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit
+    }
+    else {
+        "Signer: " | Write-Host -NoNewline
+        "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Green
+    }
+
+    # Check certificate trust and revocation
+    $cert = $signature.SignerCertificate
+    $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
+    $chain.Build($cert) | Out-Null
+    $chainStatus = $chain.ChainStatus | Select-Object -ExpandProperty Status
+
+    if ($chainStatus -and $chainStatus -notcontains "NoError") {
+        "Certificate trust status: " | Write-Host -NoNewline
+        "{0}" -f $chainStatus -join ', ' | Write-Host -f Red
+        "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit    
+    }
+    elseif ($chainStatus -contains "Revoked") {
+        "Certificate trust status: " | Write-Host -NoNewline
+        "Revoked" | Write-Host -f Red
+        "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit
+    }
+    else {
+        "Certificate trust status: " | Write-Host -NoNewline
+        "Trusted" -f $file.Name | Write-Host -f Green
+    }
+
+    # Verify certificate is not expired
+    if ($cert.NotAfter -lt (Get-Date)) {
+        "Certificate expiration status: " | Write-Host -NoNewline
+        "Expired" | Write-Host -f Red
+        "Certificate verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit
+    }
+    else {
+        "Certificate expiration status: " | Write-Host -NoNewline
+        "Not expired" | Write-Host -f Green
+    }
+    
+
+    Write-Host "Verification completed" -ForegroundColor Cyan
+}
+
+# If all checks pass
+Write-Host "HPEiLOCmdlets module verification successful. All signatures, certificates, and metadata are valid."
+Write-Host "Proceeding to import module..."
+
+# Import HPEiLOCmdlets module
+Import-Module HPEiLOCmdlets
+
+
+#EndRegion
+
+#Region -------------------------------------------------------- Verification of the HPECOMCmdlets module's authenticity and integrity before use. --------------------------------------------------------------------------------------------
+
+# Ensure the module is installed
+$module = Get-Module -Name HPECOMCmdlets -ListAvailable
+if (-not $module) {
+    "'HPECOMCmdlets' module is not installed. Please install it using 'Install-Module -Name HPECOMCmdlets'." | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+# Get module path
+$modulePath = (Get-Module -Name HPECOMCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 ).ModuleBase
+
+if (-not (Test-Path $modulePath)) {
+    "Module path not found: {0}" -f $modulePath | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+# Check module metadata
+$psd1Path = Join-Path $modulePath "HPECOMCmdlets.psd1"
+if (-not (Test-Path $psd1Path)) {
+    "Module manifest (.psd1) not found at: {0}" -f $psd1Path | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+$metadata = Import-PowerShellDataFile -Path $psd1Path
+if ($metadata.CompanyName -notlike "Hewlett-Packard Enterprise" -and $metadata.Author -notlike "Lionel Jullien") {
+    "Module metadata does not match HPE. CompanyName: {0}, Author: {1}" -f $metadata.CompanyName, $metadata.Author | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+# Get all relevant module files (.psm1, .psd1, .dll)
+$files = Get-ChildItem -Path $modulePath -Recurse -Include *.psm1, *.psd1, *.ps1xml
+if (-not $files) {
+    "No relevant module files (.psm1, .psd1, .ps1xml) found in: {0}" -f $modulePath | Write-Host -f Red
+    Read-Host -Prompt "Hit return to close" 
+    exit
+}
+
+# Verify digital signatures and certificates
+foreach ($file in $files) {
+    "`nVerifying file: " | Write-Host -NoNewline
+    "$($file.Name)" | Write-Host -f Cyan
+    
+    # Check digital signature
+    $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+    if ($signature.Status -ne "Valid") {
+        "Signature: " | Write-Host -NoNewline
+        "{0}" -f $signature.Status | Write-Host -f Red
+        "Signature is not valid. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit
+    }
+    else {
+        "Signature: " | Write-Host -NoNewline
+        "{0}" -f $signature.Status | Write-Host -f Green
+    }
+
+    # Verify signer is HPE
+    if ($signature.SignerCertificate.Subject -notlike "*Hewlett Packard Enterprise*") {
+        "Signer: " | Write-Host -NoNewline
+        "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Red
+        "The module is not signed by Hewlett Packard Enterprise (HPE). Aborting operation for security reasons." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit
+    }
+    else {
+        "Signer: " | Write-Host -NoNewline
+        "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Green
+    }
+
+    # Check certificate trust and revocation
+    $cert = $signature.SignerCertificate
+    $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
+    $chain.Build($cert) | Out-Null
+    $chainStatus = $chain.ChainStatus | Select-Object -ExpandProperty Status
+
+    if ($chainStatus -and $chainStatus -notcontains "NoError") {
+        "Certificate trust status: " | Write-Host -NoNewline
+        "{0}" -f $chainStatus -join ', ' | Write-Host -f Red
+        "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit    
+    }
+    elseif ($chainStatus -contains "Revoked") {
+        "Certificate trust status: " | Write-Host -NoNewline
+        "Revoked" | Write-Host -f Red
+        "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit
+    }
+    else {
+        "Certificate trust status: " | Write-Host -NoNewline
+        "Trusted" -f $file.Name | Write-Host -f Green
+    }
+
+    # Verify certificate is not expired
+    if ($cert.NotAfter -lt (Get-Date)) {
+        "Certificate expiration status: " | Write-Host -NoNewline
+        "Expired" | Write-Host -f Red
+        "Certificate verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close"
+        exit
+    }
+    else {
+        "Certificate expiration status: " | Write-Host -NoNewline
+        "Not expired" | Write-Host -f Green
+    }
+    
+
+    Write-Host "Verification completed" -ForegroundColor Cyan
+}
+
+# If all checks pass
+Write-Host "HPECOMCmdlets module verification successful. All signatures, certificates, and metadata are valid."
+Write-Host "Proceeding to import module..."
+
+# Import the HPECOMCmdlets module 
+Import-Module HPECOMCmdlets
 
 #EndRegion
 
