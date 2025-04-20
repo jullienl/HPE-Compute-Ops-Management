@@ -63,8 +63,15 @@ The script can be run with the following parameters:
 **Requirements:**
 
 - PowerShell 7 (versions lower than 7.5.0 due to a known issue with the HPEiLOCmdlets module with .NET SDK 9 used in versions 7.5.0 and later).
-- HPEiLOCmdlets PowerShell module to connect to iLOs (automatically installed if not already present).
-- HPECOMCmdlets PowerShell module to connect to HPE GreenLake (automatically installed if not already present).
+- PowerShell Modules:
+  - HPEiLOCmdlets (https://www.powershellgallery.com/packages/HPEiLOCmdlets)
+    - Used to connect to iLOs and perform iLO configuration tasks.
+    - Automatically installed if not already present.
+    - Authenticity and integrity of the module are verified before use.
+  - HPECOMCmdlets (https://www.powershellgallery.com/packages/HPECOMCmdlets)
+    - Used to connect to HPE GreenLake and COM and to perform configuration tasks.
+    - Automatically installed if not already present.
+    - Authenticity and integrity of the module are verified before use.
 - Network access to both HPE GreenLake and the HPE iLOs.
 - The servers you want to add and configure are not assigned to other COM service instances in the same workspace or a different workspace.
 - HPE GreenLake user account:
