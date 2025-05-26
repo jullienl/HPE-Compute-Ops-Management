@@ -460,7 +460,7 @@ If (-not (Get-Module HPEiLOCmdlets -ListAvailable)) {
     Write-Host "HPEiLOCmdlets module not found, installing now..."
 
     Try {
-        Install-Module -Name HPEiLOCmdlets -Force -AllowClobber -AcceptLicense -ErrorAction Stop
+        Install-Module -Name HPEiLOCmdlets -RequiredVersion 4.4.0.0 -Force -AllowClobber -AcceptLicense -ErrorAction Stop
     }
     catch {
         $_
@@ -470,13 +470,27 @@ If (-not (Get-Module HPEiLOCmdlets -ListAvailable)) {
 }
 else {
     $installedModuleVersion = [version](Get-Module HPEiLOCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 | Select-Object -ExpandProperty Version)
-    $latestVersion = [version](Find-Module -Name HPEiLOCmdlets | Select-Object -ExpandProperty Version)
+    $latestVersion = [version](Find-Module -Name HPEiLOCmdlets -RequiredVersion 4.4.0.0 | Select-Object -ExpandProperty Version)
 
     if ($installedModuleVersion -lt $latestVersion) {
         "Version of HPEiLOCmdlets module installed '{0}' is outdated. Updating now to '{1}'..." -f $installedModuleVersion, $latestVersion | Write-Host -f Yellow
         
         Try {
-            Install-Module -Name HPEiLOCmdlets -Force -AllowClobber -AcceptLicense -ErrorAction Stop
+            Install-Module -Name HPEiLOCmdlets -RequiredVersion 4.4.0.0 -Force -AllowClobber -AcceptLicense -ErrorAction Stop
+        }
+        catch {
+            $_
+            Read-Host "Hit return to close"
+            exit
+        }
+    }
+
+    if ($installedModuleVersion -gt $latestVersion) {
+        "Version of HPEiLOCmdlets module installed '{0}' is not supported yet. Downgrading now to '{1}'..." -f $installedModuleVersion, $latestVersion | Write-Host -f Yellow
+        
+        Try {
+            Uninstall-Module -Name HPEiLOCmdlets -RequiredVersion $installedModuleVersion -Force -ErrorAction Stop
+            Install-Module -Name HPEiLOCmdlets -RequiredVersion 4.4.0.0 -Force -AllowClobber -AcceptLicense -ErrorAction Stop
         }
         catch {
             $_
