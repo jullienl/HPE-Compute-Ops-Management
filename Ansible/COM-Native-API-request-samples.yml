@@ -3,19 +3,27 @@
 #
 # To learn more about how to set up the API client credentials, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us 
 #
-# To secure your HPE Compute Ops Management credentials, using Ansible vault to encrypt them. From the root of this Ansible project on the Ansible control node, run:   
-#     
-#     $ ansible-vault create GLCP_US_West_credentials_encrypted.yml
-#        
-#     Once the password is entered, type the following content using your own API client credentials and connectivity endpoint:
-#     
-#      ---
-#      ClientID: "xxxxxxxx-xxxx-xxx-xxx-xxxxxxxxx"
-#      ClientSecret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-#      ConnectivityEndpoint: "https://<connectivity_endpoint>-api.compute.cloud.hpe.com"
-#        
-#     Note: To access the HPE Compute Ops Management API, you need to create your client credentials on the HPE GreenLake platform, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us&page=GUID-23E6EE78-AAB7-472C-8D16-7169938BE628.html
+# Preparation to run the playbook: 
 #
+# - Secure your HPE Compute Ops Management credentials, using Ansible vault to encrypt them. From the root of this Ansible project on the Ansible control node, run:   
+#     
+#   $ ansible-playbook vars/GLP_COM_API_credentials_encrypted.yml --ask-vault-password
+#        
+#   Once the password is entered, type the following content using your own API client credentials and connectivity endpoint:
+#
+#   ---
+#   ClientID: "xxxxxxxx-xxxx-xxx-xxx-xxxxxxxxx"
+#   ClientSecret: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+#   ConnectivityEndpoint: "https://<connectivity_endpoint>-api.compute.cloud.hpe.com"
+#      
+#   Note: To access the HPE Compute Ops Management API, you need to create your client credentials on the HPE GreenLake platform, see https://support.hpe.com/hpesc/public/docDisplay?docId=a00120892en_us&page=GUID-23E6EE78-AAB7-472C-8D16-7169938BE628.html
+#
+# - To run this playbook, use:
+#
+#   $ ansible-playbook COM-Native-API-request-samples.yml --ask-vault-password 
+#
+#   With a pass file containing the vault/become password:
+#   $ ansible-playbook COM-Native-API-request-samples.yml --vault-password-file vault_pass.txt
 #
 # Author: lionel.jullien@hpe.com
 # Date:   July 2022
@@ -50,73 +58,22 @@
 - hosts: localhost
   gather_facts: no
   vars_files:
-    - GLCP_US_West_credentials_encrypted.yml        
-  
+    - vars/api_versions.yml # Contains the API versions for the resources used in this playbook
+    - vars/GLP_COM_API_credentials_encrypted.yml # Contains the HPE Compute Ops Management API credentials and connectivity endpoint    
+     
   tasks:    
 
 
-#--------------------------------------Authentication with COM----------------------------------------------------------------------------------
+#--------------------------------------Authentication with COM---------------------------------------------------------------------------------------------------------
 
   - name: Create HPE Compute Ops Management session
-    uri:
-      url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
-      method: POST
-      body_format: raw
-      headers:
-        Content-Type: "application/x-www-form-urlencoded"
-      body: "grant_type=client_credentials&client_id={{ ClientID }}&client_secret={{ ClientSecret }}"
-    register: login
-
-  # - debug: var=login
-
-  - name: Set variable access_token for the bearer access_token
-    set_fact:
-      access_token: "{{ login.json.access_token }}"
-
-  # - debug: var=access_token
+    import_tasks: files/Create_COM_session.yml
 
 
-#--------------------------------------Capture COM resource API versions -----------------------------------------------------------------------
-
-  - name: Capture resource API versions from the COM API reference
-    uri:
-      url: "https://developer.greenlake.hpe.com/_auth/sidebar/__alternative-sidebar__-data-glcp-doc-portal-docs-greenlake-services-compute-ops-mgmt-sidebars.yaml"
-      method: GET
-      return_content: true
-    register: data
-    until: data.status == 200
-    retries: 5
-    delay: 5
-    delegate_to: localhost
-
-  # - debug: var=data
-
-  - name: Set a variable for the COM API reference content
-    set_fact:
-      API_reference_content: "{{ data.content }}"
-
-  # - debug: var=API_reference_content
-
-  - name: Set a variable for items property of the COM API reference content 
-    set_fact:
-      items: "{{ API_reference_content | json_query(query) }}"
-    vars:
-      query: "items[?label=='API reference'].items"
-
-  # - debug:
-  #     msg: "{{ items[0] }}"
-
-  - name: Set variables for each API version
-    set_fact:
-      API_resources_list: "{{ API_resources_list|default([]) +   [ { 'name': item.label | regex_replace('.{10}$', '') | replace('-', '_') , 'value': item.label[-7:] } ]    }}"
-      "{{ (item.label | regex_replace('.{10}$', '') | replace('-', '_') ) + '_API_version' }}": "{{ item.label[-7:] }}"
-    loop: "{{ items[0][1:-1] | reverse }}"
-    loop_control:
-      label: "Variable set: {{ (item.label | regex_replace('.{10}$', '')  | replace('-', '_')) + '_API_version' }} = {{ item.label[-7:] }}"
-  # - name: Print API_resources_list variables
-  #   debug:
-  #       var=API_resources_list
-  #       var=hostvars[inventory_hostname]
+#--------------------------------------Capture Job Templates Resource Uri-----------------------------------------------------------------------------------------------
+  
+  - name: Capture Job Templates ResourceUri
+    import_tasks: files/Get_job_templates_resourceuri.yml
 
 
 #--------------------------------------SERVERS task samples-------------------------------------------------------------------------------------
@@ -128,6 +85,7 @@
       headers:
         Authorization: "Bearer {{ access_token }}"
     register: servers
+
 
   # - name: Display all servers
   #   debug: var=servers
@@ -173,14 +131,13 @@
         Authorization: "Bearer {{ access_token }}"
     register: activities
 
-  # - name: Display all activities
-  #   debug: var=activities
+  - name: Display all activities
+    debug: var=activities
 
   - name: List last activity
     uri:
       url: "{{ ConnectivityEndpoint }}/compute-ops-mgmt/{{ activities_API_version }}/activities?limit=1"
       method: GET
-
       headers:
         Authorization: "Bearer {{ access_token }}"
     register: activities
@@ -199,8 +156,8 @@
         Authorization: "Bearer {{ access_token }}"
     register: firmwarebundles
 
-  # - name: Display all firmware bundles
-  #   debug: var=firmwarebundles
+  - name: Display all firmware bundles
+    debug: var=firmwarebundles
 
   - name: Set variable firmwarebundleID for firmware bundles SPP 2022.03.0
     set_fact:
@@ -208,7 +165,7 @@
     vars:
       query: "json.items[?releaseVersion=='2022.03.0'].id"
 
-  # - debug: var=firmwarebundleID
+  - debug: var=firmwarebundleID
 
   - name: List firmware bundle 2022.03.0
     uri:
@@ -234,24 +191,35 @@
     # group_names and groups are predefined by Ansible
     register: allgroups
 
-  # - name: Display all groups
-  #   debug: var=allgroups
+  - name: Set a variable for items property 
+    set_fact:
+      items: "{{ allgroups | json_query(query) }}"
+    vars:
+      query: "json.items"
 
-  - name: Set variable groupid for 'Production-Group'
+  - name: Loop over list items
+    debug:
+      msg: "{{ item.name }}"
+    loop: "{{ items }}"
+    loop_control:
+      label: "{{ item.name }}"
+
+  - name: Set variable groupid for 'ESXi_group'
     set_fact:
       groupid:  "{{ (allgroups | json_query(query) )[0] }}"
     vars:
-      query: "json.items[?name=='Production-Group'].id"
+      query: "json.items[?name=='ESXi_group'].id"
+  
+  - debug: var=groupid
 
   - name: Set variable groupuri for a group 
     set_fact:
       groupuri:  "{{ (allgroups | json_query(query) )[0] }}"
     vars:
-      query: "json.items[?name=='Production-Group'].selfUri"
+      query: "json.items[?name=='ESXi_group'].resourceUri"
 
-  # - debug: var=groupuri
+  - debug: var=groupuri
 
-  # - debug: var=groupid
 
   - name: List group 'Production-Group'
     uri:
