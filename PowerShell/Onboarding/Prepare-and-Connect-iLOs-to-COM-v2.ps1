@@ -1,11 +1,14 @@
 <#
-.UPDATE
+.SYNOPSIS
+Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
+
 June 4, 2025:
  - Improved session reliability: The script now actively maintains the HPE GreenLake session throughout execution to prevent timeouts that could disrupt operations.
  - Enhanced documentation: Added guidance in the script header for optimizing performance during large-scale server onboarding and reducing firmware update delays.
  - Module management improvements: The script always installs and uses the latest version of HPEiLOCmdlets, ensuring compatibility with PowerShell 7.5.0 and resolving known PSCredential login issues.
  - Security enhancements: The script verifies the authenticity and integrity of the HPEiLOCmdlets and HPECOMCmdlets modules before use (on Windows systems only) to ensure only trusted code is executed.
  - Changed the timing of COM activation key generation: The activation key is now generated just before onboarding each iLO, and its expiration time is set to 1 day (increased from the default 1 hour) to provide more flexibility and reduce the risk of key expiration during large onboarding operations.
+
 
 .DESCRIPTION
 This PowerShell script automates the process of connecting HPE Gen10 and later servers to HPE Compute Ops Management (COM).
