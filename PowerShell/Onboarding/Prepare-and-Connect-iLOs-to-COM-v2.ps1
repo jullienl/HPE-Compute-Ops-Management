@@ -5,6 +5,7 @@ June 4, 2025:
  - Enhanced documentation: Added guidance in the script header for optimizing performance during large-scale server onboarding and reducing firmware update delays.
  - Module management improvements: The script always installs and uses the latest version of HPEiLOCmdlets, ensuring compatibility with PowerShell 7.5.0 and resolving known PSCredential login issues.
  - Security enhancements: The script verifies the authenticity and integrity of the HPEiLOCmdlets and HPECOMCmdlets modules before use (on Windows systems only) to ensure only trusted code is executed.
+ - Changed the timing of COM activation key generation: The activation key is now generated just before onboarding each iLO, and its expiration time is set to 1 day (increased from the default 1 hour) to provide more flexibility and reduce the risk of key expiration during large onboarding operations.
 
 .DESCRIPTION
 This PowerShell script automates the process of connecting HPE Gen10 and later servers to HPE Compute Ops Management (COM).
@@ -1004,74 +1005,6 @@ if ($SecureGateway) {
 
 
 #EndRegion  
-
-#Region -------------------------------------------------------- Generating a COM activation key -------------------------------------------------------------------------------------
-
-if (-not $Check) {
-
-    try {
-
-        If ($SecureGateway) {
-
-            # Check if a Secure gateway activation key already exists
-            $ExistingSecureGatewayActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | Where-Object { $_.applianceName } | Select-Object -First 1 -ExpandProperty ActivationKey
-            
-            # Generate a new activation key if none exists
-            if (-not $ExistingSecureGatewayActivationKey) {
-                
-                $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -SecureGateway $SecureGateway -Verbose:$Verbose -ErrorAction Stop
-    
-                if ($COMActivationKey) {
-                    "[Workspace: {0}] - Successfully generated COM secure gateway activation key '{1}' for region '{2}'." -f $WorkspaceName, $COMActivationKey, $Region | Write-Host -f Green
-                }
-                else {
-                    "[Workspace: {0}] - Error generating COM secure gateway activation key. Please check your configuration and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
-                    Read-Host -Prompt "Hit return to close" 
-                    exit
-                }
-            }
-            # Use the existing activation key
-            else {
-                "[Workspace: {0}] - Existing COM secure gateway activation key '{1}' successfully retrieved for region '{2}'." -f $WorkspaceName, $ExistingSecureGatewayActivationKey, $Region | Write-Host -f Green
-                $COMActivationKey = $ExistingSecureGatewayActivationKey
-    
-            }   
-        }
-        else {
-
-            # Check if an activation key already exists
-            $ExistingActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | Select-Object -First 1 -ExpandProperty ActivationKey
-            
-            # Generate a new activation key if none exists
-            if (-not $ExistingActivationKey) {
-                
-                $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -Verbose:$Verbose -ErrorAction Stop
-    
-                if ($COMActivationKey) {
-                    "[Workspace: {0}] - Successfully generated COM activation key '{1}' for region '{2}'." -f $WorkspaceName, $COMActivationKey, $Region | Write-Host -f Green
-                }
-                else {
-                    "[Workspace: {0}] - Error generating COM activation key. Please check your configuration and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
-                    Read-Host -Prompt "Hit return to close" 
-                    exit
-                }
-            }
-            # Use the existing activation key
-            else {
-                "[Workspace: {0}] - Existing COM activation key '{1}' successfully retrieved for region '{2}'." -f $WorkspaceName, $ExistingActivationKey, $Region | Write-Host -f Green
-                $COMActivationKey = $ExistingActivationKey
-    
-            }   
-        }
-    }
-    catch {
-        "[Workspace: {0}] - Error generating COM activation key. Please check your configuration and try again. Status: {1}" -f $WorkspaceName, $_ | Write-Host -ForegroundColor Red
-        Read-Host -Prompt "Hit return to close" 
-        exit
-    }
-}
-
-#EndRegion
 
 #Region -------------------------------------------------------- Configuring and connecting iLOs to COM -------------------------------------------------------------------------------
 
@@ -2724,6 +2657,70 @@ ForEach ($iLO in $iLOs) {
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5}) - iLO is ready for COM connection." -f $iLO.IP, $iLOFirmwareVersion, $iLOGeneration, $ServerModel, $ServerGeneration, $objStatus.SerialNumber | Write-Verbose
             }
         }
+
+        #Region -------------------------------------------------------- Generating a COM activation key -------------------------------------------------------------------------------------
+        try {
+
+            If ($SecureGateway) {
+
+                # Check if a Secure gateway activation key already exists
+                $ExistingSecureGatewayActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | Where-Object { $_.applianceName } | Select-Object -First 1 -ExpandProperty ActivationKey
+            
+                # Generate a new activation key (valid for 1 day) if none exists
+                if (-not $ExistingSecureGatewayActivationKey) {
+                
+                    $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -ExpirationInHours 24 -SecureGateway $SecureGateway -Verbose:$Verbose -ErrorAction Stop
+    
+                    if ($COMActivationKey) {
+                        "[Workspace: {0}] - Successfully generated COM secure gateway activation key '{1}' for region '{2}'." -f $WorkspaceName, $COMActivationKey, $Region | Write-Host -f Green
+                    }
+                    else {
+                        "[Workspace: {0}] - Error generating COM secure gateway activation key. Please check your configuration and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
+                        Read-Host -Prompt "Hit return to close" 
+                        exit
+                    }
+                }
+                # Use the existing activation key
+                else {
+                    "[Workspace: {0}] - Existing COM secure gateway activation key '{1}' successfully retrieved for region '{2}'." -f $WorkspaceName, $ExistingSecureGatewayActivationKey, $Region | Write-Host -f Green
+                    $COMActivationKey = $ExistingSecureGatewayActivationKey
+    
+                }   
+            }
+            else {
+
+                # Check if an activation key already exists
+                $ExistingActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | Select-Object -First 1 -ExpandProperty ActivationKey
+            
+                # Generate a new activation key (valid for 1 day) if none exists
+                if (-not $ExistingActivationKey) {
+                
+                    $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -ExpirationInHours 24 -Verbose:$Verbose -ErrorAction Stop
+    
+                    if ($COMActivationKey) {
+                        "[Workspace: {0}] - Successfully generated COM activation key '{1}' for region '{2}'." -f $WorkspaceName, $COMActivationKey, $Region | Write-Host -f Green
+                    }
+                    else {
+                        "[Workspace: {0}] - Error generating COM activation key. Please check your configuration and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
+                        Read-Host -Prompt "Hit return to close" 
+                        exit
+                    }
+                }
+                # Use the existing activation key
+                else {
+                    "[Workspace: {0}] - Existing COM activation key '{1}' successfully retrieved for region '{2}'." -f $WorkspaceName, $ExistingActivationKey, $Region | Write-Host -f Green
+                    $COMActivationKey = $ExistingActivationKey
+    
+                }   
+            }
+        }
+        catch {
+            "[Workspace: {0}] - Error generating COM activation key. Please check your configuration and try again. Status: {1}" -f $WorkspaceName, $_ | Write-Host -ForegroundColor Red
+            Read-Host -Prompt "Hit return to close" 
+            exit
+        }
+
+        #EndRegion
             
         try {
 
