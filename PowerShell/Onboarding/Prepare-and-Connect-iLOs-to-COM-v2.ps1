@@ -1,4 +1,10 @@
 <#
+.UPDATE
+June 4, 2025:
+ - Improved session reliability: The script now actively maintains the HPE GreenLake session throughout execution to prevent timeouts that could disrupt operations.
+ - Enhanced documentation: Added guidance in the script header for optimizing performance during large-scale server onboarding and reducing firmware update delays.
+ - Module management improvements: The script always installs and uses the latest version of HPEiLOCmdlets, ensuring compatibility with PowerShell 7.5.0 and resolving known PSCredential login issues.
+ - Security enhancements: The script verifies the authenticity and integrity of the HPEiLOCmdlets and HPECOMCmdlets modules before use (on Windows systems only) to ensure only trusted code is executed.
 
 .DESCRIPTION
 This PowerShell script automates the process of connecting HPE Gen10 and later servers to HPE Compute Ops Management (COM).
@@ -9,22 +15,9 @@ This preparation is essential to ensure that iLOs are ready for COM and can effe
 - Setting up NTP: To ensure the date and time of iLO are correct
 - Updating iLO firmware: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, or iLO6 1.64 or later).
 
-The script requires a CSV file that contains the list of iLO IP addresses or resolvable hostnames to be connected to COM.
-
-This CSV file must have the following format:
-
-```
-IP
-192.168.0.100
-192.168.0.101
-192.168.0.102
-```
-
-Note: The first line is the header and must be "IP".
-Note: This script requires all iLOs to use the same iLO account username and password.
+The script requires all iLOs to use the same iLO account username and password and a CSV file that contains the list of iLO IP addresses or resolvable hostnames to be connected to COM.
 
 To see a demonstration of this script in action, watch the following video: https://youtu.be/ZV0bmqmODmU.
-
 
 The script performs the following actions:
 1. Connects to HPE GreenLake.
@@ -55,15 +48,18 @@ The script can be run with the following parameters:
 Note: The script requires the HPEiLOCmdlets and HPECOMCmdlets PowerShell modules to connect to iLOs and HPE GreenLake, respectively. The two modules are automatically installed if not already present.
 
 Requirements:
-- PowerShell 7 (versions lower than 7.5.0 due to a known issue with the HPEiLOCmdlets module with .NET SDK 9 used in versions 7.5.0 and later).
+- PowerShell 7.
 - PowerShell Modules:
   - HPEiLOCmdlets (https://www.powershellgallery.com/packages/HPEiLOCmdlets)
     - Used to connect to iLOs and perform iLO configuration tasks.
     - Automatically installed if not already present.
+        - The script always installs and uses the latest version of the module to ensure compatibility and access to the latest features and fixes.
+        - Supported version: 5.1.0.0 or later (earlier versions of HPEiLOCmdlets have known issues and are not supported).
     - Authenticity and integrity of the module are verified before use.
   - HPECOMCmdlets (https://www.powershellgallery.com/packages/HPECOMCmdlets)
     - Used to connect to HPE GreenLake and COM and to perform configuration tasks.
     - Automatically installed if not already present.
+        - The script always installs and uses the latest version of the module to ensure compatibility and access to the latest features and fixes.
     - Authenticity and integrity of the module are verified before use.
 - Network access to both HPE GreenLake and the HPE iLOs.
 - The servers you want to add and configure are not assigned to other COM service instances in the same workspace or a different workspace.
@@ -82,7 +78,14 @@ Requirements:
   - The password of the iLO account.
 
 How to use:
-1. Update the variables in the script as needed.
+1. Create a CSV file with the list of iLO IP addresses or resolvable hostnames to be connected to COM. The CSV file must have a header "IP" and contain the iLO IP addresses or hostnames in the first column.
+    - Example:
+        IP
+        192.168.0.20
+        192.168.0.21
+        192.168.1.56
+    - Note: The first line is the header and must be "IP".
+2. Update the variables in the script as needed.
     - Path to the CSV file containing the list of iLO IP addresses or resolvable hostnames
     - Path to the iLO firmware flash files for iLO5 and iLO6.
     - Username of the iLO account.
@@ -94,10 +97,15 @@ How to use:
     - Region where the COM instance is provisioned.
     - Location name where the devices will be assigned (optional).
     - Tags to assign to devices (optional).
-2. Run the script in a PowerShell 7 environment.
-3. Review the output to ensure that the iLOs are successfully connected to COM.
+3. Run the script in a PowerShell 7 environment.
+4. Review the output to ensure that the iLOs are successfully connected to COM.
 
-Note: The script can be run multiple times with different CSV files to assign different tags or locations to servers.
+Note: 
+- The script can be run multiple times with different CSV files to assign different tags or locations to servers.
+- Firmware updates can take significantly longer when the iLO firmware binary is not located on the local network, due to slower file transfer speeds. 
+  To optimize the process, make sure the iLO firmware binary is accessible on the same local network as your iLOs. 
+  This typically allows updates to complete more quickly and significantly reduces overall delays.
+- To accelerate onboarding through parallel processing, consider splitting your list of iLOs into multiple CSV files and running several instances of the script simultaneously, each with a different CSV file.
 
 .EXAMPLE
 
@@ -400,31 +408,30 @@ $Tags = "Country=FR, App=AI, Department=IT"
 
 #Region -------------------------------------------------------- Preparation -----------------------------------------------------------------------------------------
 
+# Check if the script is running in PowerShell 7 
+if ($PSVersionTable.PSVersion.Major -ne 7) {
+    Write-Host "Error: PowerShell 7 is required to run this script. Please launch this script in a PowerShell 7 session and try again." -ForegroundColor Red
+    Read-Host -Prompt "Hit return to close"    
+    exit
+}
+
 # Ask for the iLO account password
 $iLOSecuredPassword = (Read-Host -AsSecureString "Enter password for iLO account '$iLOUserName'")
 
-
 # Importing iLO list
 if (-not (Test-Path $iLOcsvPath)) {
-    "iLO CSV file '{0}' not found. Please check your CSV file path and try again." -f $iLOcsvPath | Write-Host -f Red
+    "Error: iLO CSV file '{0}' not found. Please check your CSV file path and try again." -f $iLOcsvPath | Write-Host -f Red
     Read-Host -Prompt "Hit return to close" 
     exit
 }
 else {
     $iLOs = Import-Csv -Path $iLOcsvPath
 }
-# Check if the script is running in PowerShell 7 and lower than 7.5.0
-if ($PSVersionTable.PSVersion.Major -ne 7 -or ($PSVersionTable.PSVersion.Major -eq 7 -and $PSVersionTable.PSVersion.Minor -ge 5)) {
-    Write-Error "This script requires PowerShell 7.x where x < 5.0. Please run this script in the appropriate version of PowerShell 7."
-    "This script requires PowerShell 7.x where x < 5.0. Please run this script in the appropriate version of PowerShell 7." | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close"
-    exit
-}
 
 # Check if iLO firmware files are present
 if ($iLO5binFile) {
     if (-not (Test-Path $iLO5binFile)) {
-        "iLO5 firmware file '{0}' not found. Please check your iLO5 firmware file path and try again." -f $iLO5binFile | Write-Host -f Red
+        "Error: iLO5 firmware file '{0}' not found. Please check your iLO5 firmware file path and try again." -f $iLO5binFile | Write-Host -f Red
         Read-Host -Prompt "Hit return to close" 
         exit
     }
@@ -432,7 +439,7 @@ if ($iLO5binFile) {
 
 if ($iLO6binFile) {
     if (-not (Test-Path $iLO6binFile)) {
-        "iLO6 firmware file '{0}' not found. Please check your iLO6 firmware file path and try again." -f $iLO6binFile | Write-Host -f Red
+        "Error: iLO6 firmware file '{0}' not found. Please check your iLO6 firmware file path and try again." -f $iLO6binFile | Write-Host -f Red
         Read-Host -Prompt "Hit return to close" 
         exit
     }
@@ -477,6 +484,8 @@ else {
         
         Try {
             Install-Module -Name HPEiLOCmdlets -Force -AllowClobber -AcceptLicense -ErrorAction Stop
+            # Uninstall the old version of the module
+            Uninstall-Module -Name HPEiLOCmdlets -RequiredVersion $installedModuleVersion -Force -ErrorAction SilentlyContinue
         }
         catch {
             $_
@@ -503,10 +512,12 @@ else {
     $latestVersion = [version](Find-Module -Name HPECOMCmdlets | Select-Object -ExpandProperty Version)
 
     if ($installedModuleVersion -lt $latestVersion) {
-        Write-Host "A newer version of HPECOMCmdlets module is available, updating now..."
+        "Version of HPECOMCmdlets module installed '{0}' is outdated. Updating now to '{1}'..." -f $installedModuleVersion, $latestVersion | Write-Host -f Yellow
 
         Try {
             Install-Module -Name HPECOMCmdlets -Force -AllowClobber -AcceptLicense -ErrorAction Stop
+            # Uninstall the old version of the module
+            Uninstall-Module -Name HPECOMCmdlets -RequiredVersion $installedModuleVersion -Force -ErrorAction SilentlyContinue
 
         }
         catch {
@@ -2196,7 +2207,8 @@ ForEach ($iLO in $iLOs) {
                             else {
                                 $iLOConnection = Connect-HPEiLO -IP $iLO.IP -Credential $iLOcredentials -Verbose:$Verbose -ErrorAction SilentlyContinue
                             }
-
+    
+                            Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                             $retryCount++
                         }
 
@@ -2224,7 +2236,8 @@ ForEach ($iLO in $iLOs) {
                     do {
                         # Testing network access to iLO
                         $pingResult = Test-Connection -ComputerName $iLO.IP -Count 2 -ErrorAction SilentlyContinue
-                        Start-Sleep -Seconds 5
+                        Start-Sleep -Seconds 4
+                        Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                         $retryCount++
                     } until ($pingResult.Status -ne 'Success' -or $retryCount -ge $maxRetries)
 
@@ -2255,7 +2268,8 @@ ForEach ($iLO in $iLOs) {
                     do {
                         # Testing network access to iLO
                         $pingResult = Test-Connection -ComputerName $iLO.IP -Count 2 -ErrorAction SilentlyContinue
-                        Start-Sleep -Seconds 5
+                        Start-Sleep -Seconds 4
+                        Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                         $retryCount++
                     } until ($pingResult.Status -eq 'Success' -or $retryCount -ge $maxRetries)
 
@@ -2298,7 +2312,8 @@ ForEach ($iLO in $iLOs) {
 
                                 }
                                 catch {
-                                    Start-Sleep -Seconds 5
+                                    Start-Sleep -Seconds 4
+                                    Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                                     $retryCount++
                                 }
                             } until ($iLOConnection -or $retryCount -ge $maxRetries)
@@ -2465,7 +2480,8 @@ ForEach ($iLO in $iLOs) {
                                 $iLOConnection = Connect-HPEiLO -IP $iLO.IP -Credential $iLOcredentials -Verbose:$Verbose -ErrorAction SilentlyContinue
                             }
 
-                            $retryCount++
+                            Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
+                            $retryCount++                          
                         }
 
                     } until ($FirmwareUpdateResult.StatusInfo.Message -eq "ResetInProgress" -or $retryCount -ge $maxRetries)
@@ -2492,7 +2508,8 @@ ForEach ($iLO in $iLOs) {
                     do {
                         # Testing network access to iLO
                         $pingResult = Test-Connection -ComputerName $iLO.IP -Count 2 -ErrorAction SilentlyContinue
-                        Start-Sleep -Seconds 5
+                        Start-Sleep -Seconds 4
+                        Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                         $retryCount++
                     } until ($pingResult.Status -ne 'Success' -or $retryCount -ge $maxRetries)
 
@@ -2523,7 +2540,8 @@ ForEach ($iLO in $iLOs) {
                     do {
                         # Testing network access to iLO
                         $pingResult = Test-Connection -ComputerName $iLO.IP -Count 2 -ErrorAction SilentlyContinue
-                        Start-Sleep -Seconds 5
+                        Start-Sleep -Seconds 4
+                        Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                         $retryCount++
                     } until ($pingResult.Status -eq 'Success' -or $retryCount -ge $maxRetries)
 
@@ -2566,7 +2584,8 @@ ForEach ($iLO in $iLOs) {
 
                                 }
                                 catch {
-                                    Start-Sleep -Seconds 5
+                                    Start-Sleep -Seconds 4
+                                    Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                                     $retryCount++
                                 }
                             } until ($iLOConnection -or $retryCount -ge $maxRetries)
@@ -2677,11 +2696,13 @@ ForEach ($iLO in $iLOs) {
                 try {
                     $iLOComputeOpsManagementStatus = Get-HPEiLOComputeOpsManagementStatus -Connection $iLOconnection -Verbose:$Verbose -ErrorAction Stop | Select-Object -ExpandProperty Status -ErrorAction Stop
                    
-                    Start-Sleep -Seconds 5
+                    Start-Sleep -Seconds 4
+                    Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                     $retryCount++
                 }
                 catch {
-                    Start-Sleep -Seconds 5
+                    Start-Sleep -Seconds 4
+                    Get-HPEGLAPIcredential | Out-Null ## Perform a Get operation to keep the HPE GreenLake session active
                     $retryCount++
                 }
                 
