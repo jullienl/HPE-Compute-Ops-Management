@@ -460,7 +460,7 @@ If (-not (Get-Module HPEiLOCmdlets -ListAvailable)) {
     Write-Host "HPEiLOCmdlets module not found, installing now..."
 
     Try {
-        Install-Module -Name HPEiLOCmdlets -RequiredVersion 4.4.0.0 -Force -AllowClobber -AcceptLicense -ErrorAction Stop
+        Install-Module -Name HPEiLOCmdlets -Force -AllowClobber -AcceptLicense -ErrorAction Stop
     }
     catch {
         $_
@@ -470,27 +470,13 @@ If (-not (Get-Module HPEiLOCmdlets -ListAvailable)) {
 }
 else {
     $installedModuleVersion = [version](Get-Module HPEiLOCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 | Select-Object -ExpandProperty Version)
-    $latestVersion = [version](Find-Module -Name HPEiLOCmdlets -RequiredVersion 4.4.0.0 | Select-Object -ExpandProperty Version)
+    $latestVersion = [version](Find-Module -Name HPEiLOCmdlets | Select-Object -ExpandProperty Version)
 
     if ($installedModuleVersion -lt $latestVersion) {
         "Version of HPEiLOCmdlets module installed '{0}' is outdated. Updating now to '{1}'..." -f $installedModuleVersion, $latestVersion | Write-Host -f Yellow
         
         Try {
-            Install-Module -Name HPEiLOCmdlets -RequiredVersion 4.4.0.0 -Force -AllowClobber -AcceptLicense -ErrorAction Stop
-        }
-        catch {
-            $_
-            Read-Host "Hit return to close"
-            exit
-        }
-    }
-
-    if ($installedModuleVersion -gt $latestVersion) {
-        "Version of HPEiLOCmdlets module installed '{0}' is not supported yet. Downgrading now to '{1}'..." -f $installedModuleVersion, $latestVersion | Write-Host -f Yellow
-        
-        Try {
-            Uninstall-Module -Name HPEiLOCmdlets -RequiredVersion $installedModuleVersion -Force -ErrorAction Stop
-            Install-Module -Name HPEiLOCmdlets -RequiredVersion 4.4.0.0 -Force -AllowClobber -AcceptLicense -ErrorAction Stop
+            Install-Module -Name HPEiLOCmdlets -Force -AllowClobber -AcceptLicense -ErrorAction Stop
         }
         catch {
             $_
@@ -543,123 +529,124 @@ if (-not $module) {
     exit
 }
 
-# Get module path
-$modulePath = (Get-Module -Name HPEiLOCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 ).ModuleBase
+if ($isWindows) {
+    # Get module path
+    $modulePath = (Get-Module -Name HPEiLOCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 ).ModuleBase
 
-if (-not (Test-Path $modulePath)) {
-    "Module path not found: {0}" -f $modulePath | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
-
-# Check module metadata
-$psd1Path = Join-Path $modulePath "HPEiLOCmdlets.psd1"
-if (-not (Test-Path $psd1Path)) {
-    "Module manifest (.psd1) not found at: {0}" -f $psd1Path | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
-
-$metadata = Import-PowerShellDataFile -Path $psd1Path
-if ($metadata.CompanyName -notlike "*Hewlett Packard Enterprise*" -and $metadata.Author -notlike "*Hewlett Packard Enterprise*") {
-    "Module metadata does not match HPE. CompanyName: {0}, Author: {1}" -f $metadata.CompanyName, $metadata.Author | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
-
-# Get all relevant module files (.psm1, .psd1, .dll)
-$files = Get-ChildItem -Path $modulePath -Recurse -Include *.psm1, *.psd1, *.ps1xml, *.dll -ErrorAction SilentlyContinue
-if (-not $files) {
-    "No relevant module files (.psm1, .psd1, .ps1xml, .dll) found in: {0}" -f $modulePath | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
-
-# Verify digital signatures and certificates
-foreach ($file in $files) {
-
-    # Skip log4net.dll file
-    # log4net.dll is a third-party library used by HPEiLOCmdlets and is not signed by HPE but by Microsoft.
-    if ($file.Name -eq "log4net.dll") {
-        continue
-    }
-
-    "`nVerifying file: " | Write-Host -NoNewline
-    "$($file.Name)" | Write-Host -f Cyan
-    
-    # Check digital signature
-    $signature = Get-AuthenticodeSignature -FilePath $file.FullName
-    if ($signature.Status -ne "Valid") {
-        "Signature: " | Write-Host -NoNewline
-        "{0}" -f $signature.Status | Write-Host -f Red
-        "Signature is not valid. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
+    if (-not (Test-Path $modulePath)) {
+        "Module path not found: {0}" -f $modulePath | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close" 
         exit
     }
-    else {
-        "Signature: " | Write-Host -NoNewline
-        "{0}" -f $signature.Status | Write-Host -f Green
-    }
 
-    # Verify signer is HPE
-    if ($signature.SignerCertificate.Subject -notlike "*Hewlett Packard Enterprise*") {
-        "Signer: " | Write-Host -NoNewline
-        "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Red
-        "The module is not signed by Hewlett Packard Enterprise (HPE). Aborting operation for security reasons." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
+    # Check module metadata
+    $psd1Path = Join-Path $modulePath "HPEiLOCmdlets.psd1"
+    if (-not (Test-Path $psd1Path)) {
+        "Module manifest (.psd1) not found at: {0}" -f $psd1Path | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close" 
         exit
     }
-    else {
-        "Signer: " | Write-Host -NoNewline
-        "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Green
-    }
 
-    # Check certificate trust and revocation
-    $cert = $signature.SignerCertificate
-    $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
-    $chain.Build($cert) | Out-Null
-    $chainStatus = $chain.ChainStatus | Select-Object -ExpandProperty Status
-
-    if ($chainStatus -and $chainStatus -notcontains "NoError") {
-        "Certificate trust status: " | Write-Host -NoNewline
-        "{0}" -f $chainStatus -join ', ' | Write-Host -f Red
-        "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
-        exit    
-    }
-    elseif ($chainStatus -contains "Revoked") {
-        "Certificate trust status: " | Write-Host -NoNewline
-        "Revoked" | Write-Host -f Red
-        "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
+    $metadata = Import-PowerShellDataFile -Path $psd1Path
+    if ($metadata.CompanyName -notlike "*Hewlett Packard Enterprise*" -and $metadata.Author -notlike "*Hewlett Packard Enterprise*") {
+        "Module metadata does not match HPE. CompanyName: {0}, Author: {1}" -f $metadata.CompanyName, $metadata.Author | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close" 
         exit
     }
-    else {
-        "Certificate trust status: " | Write-Host -NoNewline
-        "Trusted" -f $file.Name | Write-Host -f Green
-    }
 
-    # Verify certificate is not expired
-    if ($cert.NotAfter -lt (Get-Date)) {
-        "Certificate expiration status: " | Write-Host -NoNewline
-        "Expired" | Write-Host -f Red
-        "Certificate verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
+    # Get all relevant module files (.psm1, .psd1, .dll)
+    $files = Get-ChildItem -Path $modulePath -Recurse -Include *.psm1, *.psd1, *.ps1xml, *.dll -ErrorAction SilentlyContinue
+    if (-not $files) {
+        "No relevant module files (.psm1, .psd1, .ps1xml, .dll) found in: {0}" -f $modulePath | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close" 
         exit
     }
-    else {
-        "Certificate expiration status: " | Write-Host -NoNewline
-        "Not expired" | Write-Host -f Green
-    }
-    
 
-    Write-Host "Verification completed" -ForegroundColor Cyan
+    # Verify digital signatures and certificates
+    foreach ($file in $files) {
+
+        # Skip log4net.dll file
+        # log4net.dll is a third-party library used by HPEiLOCmdlets and is not signed by HPE but by Microsoft.
+        if ($file.Name -eq "log4net.dll") {
+            continue
+        }
+
+        "`nVerifying file: " | Write-Host -NoNewline
+        "$($file.Name)" | Write-Host -f Cyan
+        
+        # Check digital signature
+        $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+        if ($signature.Status -ne "Valid") {
+            "Signature: " | Write-Host -NoNewline
+            "{0}" -f $signature.Status | Write-Host -f Red
+            "Signature is not valid. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+        else {
+            "Signature: " | Write-Host -NoNewline
+            "{0}" -f $signature.Status | Write-Host -f Green
+        }
+
+        # Verify signer is HPE
+        if ($signature.SignerCertificate.Subject -notlike "*Hewlett Packard Enterprise*") {
+            "Signer: " | Write-Host -NoNewline
+            "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Red
+            "The module is not signed by Hewlett Packard Enterprise (HPE). Aborting operation for security reasons." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+        else {
+            "Signer: " | Write-Host -NoNewline
+            "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Green
+        }
+
+        # Check certificate trust and revocation
+        $cert = $signature.SignerCertificate
+        $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
+        $chain.Build($cert) | Out-Null
+        $chainStatus = $chain.ChainStatus | Select-Object -ExpandProperty Status
+
+        if ($chainStatus -and $chainStatus -notcontains "NoError") {
+            "Certificate trust status: " | Write-Host -NoNewline
+            "{0}" -f $chainStatus -join ', ' | Write-Host -f Red
+            "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit    
+        }
+        elseif ($chainStatus -contains "Revoked") {
+            "Certificate trust status: " | Write-Host -NoNewline
+            "Revoked" | Write-Host -f Red
+            "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+        else {
+            "Certificate trust status: " | Write-Host -NoNewline
+            "Trusted" -f $file.Name | Write-Host -f Green
+        }
+
+        # Verify certificate is not expired
+        if ($cert.NotAfter -lt (Get-Date)) {
+            "Certificate expiration status: " | Write-Host -NoNewline
+            "Expired" | Write-Host -f Red
+            "Certificate verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+        else {
+            "Certificate expiration status: " | Write-Host -NoNewline
+            "Not expired" | Write-Host -f Green
+        }
+        
+
+        Write-Host "Verification completed" -ForegroundColor Cyan
+    }
+
+    # If all checks pass
+    Write-Host "HPEiLOCmdlets module verification successful. All signatures, certificates, and metadata are valid."
+    Write-Host "Proceeding to import module..."
 }
-
-# If all checks pass
-Write-Host "HPEiLOCmdlets module verification successful. All signatures, certificates, and metadata are valid."
-Write-Host "Proceeding to import module..."
-
 # Import HPEiLOCmdlets module
 Import-Module HPEiLOCmdlets
 
@@ -676,115 +663,117 @@ if (-not $module) {
     exit
 }
 
-# Get module path
-$modulePath = (Get-Module -Name HPECOMCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 ).ModuleBase
+if ($isWindows) {
+    # Get module path
+    $modulePath = (Get-Module -Name HPECOMCmdlets -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1 ).ModuleBase
 
-if (-not (Test-Path $modulePath)) {
-    "Module path not found: {0}" -f $modulePath | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
-
-# Check module metadata
-$psd1Path = Join-Path $modulePath "HPECOMCmdlets.psd1"
-if (-not (Test-Path $psd1Path)) {
-    "Module manifest (.psd1) not found at: {0}" -f $psd1Path | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
-
-$metadata = Import-PowerShellDataFile -Path $psd1Path
-if ($metadata.CompanyName -notlike "Hewlett-Packard Enterprise" -and $metadata.Author -notlike "Lionel Jullien") {
-    "Module metadata does not match HPE. CompanyName: {0}, Author: {1}" -f $metadata.CompanyName, $metadata.Author | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
-
-# Get all relevant module files (.psm1, .psd1, .dll)
-$files = Get-ChildItem -Path $modulePath -Recurse -Include *.psm1, *.psd1, *.ps1xml
-if (-not $files) {
-    "No relevant module files (.psm1, .psd1, .ps1xml) found in: {0}" -f $modulePath | Write-Host -f Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
-
-# Verify digital signatures and certificates
-foreach ($file in $files) {
-    "`nVerifying file: " | Write-Host -NoNewline
-    "$($file.Name)" | Write-Host -f Cyan
-    
-    # Check digital signature
-    $signature = Get-AuthenticodeSignature -FilePath $file.FullName
-    if ($signature.Status -ne "Valid") {
-        "Signature: " | Write-Host -NoNewline
-        "{0}" -f $signature.Status | Write-Host -f Red
-        "Signature is not valid. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
+    if (-not (Test-Path $modulePath)) {
+        "Module path not found: {0}" -f $modulePath | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close" 
         exit
     }
-    else {
-        "Signature: " | Write-Host -NoNewline
-        "{0}" -f $signature.Status | Write-Host -f Green
-    }
 
-    # Verify signer is HPE
-    if ($signature.SignerCertificate.Subject -notlike "*Hewlett Packard Enterprise*") {
-        "Signer: " | Write-Host -NoNewline
-        "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Red
-        "The module is not signed by Hewlett Packard Enterprise (HPE). Aborting operation for security reasons." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
+    # Check module metadata
+    $psd1Path = Join-Path $modulePath "HPECOMCmdlets.psd1"
+    if (-not (Test-Path $psd1Path)) {
+        "Module manifest (.psd1) not found at: {0}" -f $psd1Path | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close" 
         exit
     }
-    else {
-        "Signer: " | Write-Host -NoNewline
-        "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Green
-    }
 
-    # Check certificate trust and revocation
-    $cert = $signature.SignerCertificate
-    $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
-    $chain.Build($cert) | Out-Null
-    $chainStatus = $chain.ChainStatus | Select-Object -ExpandProperty Status
-
-    if ($chainStatus -and $chainStatus -notcontains "NoError") {
-        "Certificate trust status: " | Write-Host -NoNewline
-        "{0}" -f $chainStatus -join ', ' | Write-Host -f Red
-        "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
-        exit    
-    }
-    elseif ($chainStatus -contains "Revoked") {
-        "Certificate trust status: " | Write-Host -NoNewline
-        "Revoked" | Write-Host -f Red
-        "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
+    $metadata = Import-PowerShellDataFile -Path $psd1Path
+    if ($metadata.CompanyName -notlike "Hewlett-Packard Enterprise" -and $metadata.Author -notlike "Lionel Jullien") {
+        "Module metadata does not match HPE. CompanyName: {0}, Author: {1}" -f $metadata.CompanyName, $metadata.Author | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close" 
         exit
     }
-    else {
-        "Certificate trust status: " | Write-Host -NoNewline
-        "Trusted" -f $file.Name | Write-Host -f Green
-    }
 
-    # Verify certificate is not expired
-    if ($cert.NotAfter -lt (Get-Date)) {
-        "Certificate expiration status: " | Write-Host -NoNewline
-        "Expired" | Write-Host -f Red
-        "Certificate verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
-        Read-Host -Prompt "Hit return to close"
+    # Get all relevant module files (.psm1, .psd1, .dll)
+    $files = Get-ChildItem -Path $modulePath -Recurse -Include *.psm1, *.psd1, *.ps1xml
+    if (-not $files) {
+        "No relevant module files (.psm1, .psd1, .ps1xml) found in: {0}" -f $modulePath | Write-Host -f Red
+        Read-Host -Prompt "Hit return to close" 
         exit
     }
-    else {
-        "Certificate expiration status: " | Write-Host -NoNewline
-        "Not expired" | Write-Host -f Green
-    }
-    
 
-    Write-Host "Verification completed" -ForegroundColor Cyan
+    # Verify digital signatures and certificates
+    foreach ($file in $files) {
+        "`nVerifying file: " | Write-Host -NoNewline
+        "$($file.Name)" | Write-Host -f Cyan
+        
+        # Check digital signature
+        $signature = Get-AuthenticodeSignature -FilePath $file.FullName
+        if ($signature.Status -ne "Valid") {
+            "Signature: " | Write-Host -NoNewline
+            "{0}" -f $signature.Status | Write-Host -f Red
+            "Signature is not valid. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+        else {
+            "Signature: " | Write-Host -NoNewline
+            "{0}" -f $signature.Status | Write-Host -f Green
+        }
+
+        # Verify signer is HPE
+        if ($signature.SignerCertificate.Subject -notlike "*Hewlett Packard Enterprise*") {
+            "Signer: " | Write-Host -NoNewline
+            "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Red
+            "The module is not signed by Hewlett Packard Enterprise (HPE). Aborting operation for security reasons." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+        else {
+            "Signer: " | Write-Host -NoNewline
+            "{0}" -f $signature.SignerCertificate.Subject | Write-Host -f Green
+        }
+
+        # Check certificate trust and revocation
+        $cert = $signature.SignerCertificate
+        $chain = New-Object System.Security.Cryptography.X509Certificates.X509Chain
+        $chain.Build($cert) | Out-Null
+        $chainStatus = $chain.ChainStatus | Select-Object -ExpandProperty Status
+
+        if ($chainStatus -and $chainStatus -notcontains "NoError") {
+            "Certificate trust status: " | Write-Host -NoNewline
+            "{0}" -f $chainStatus -join ', ' | Write-Host -f Red
+            "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit    
+        }
+        elseif ($chainStatus -contains "Revoked") {
+            "Certificate trust status: " | Write-Host -NoNewline
+            "Revoked" | Write-Host -f Red
+            "Certificate trust verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+        else {
+            "Certificate trust status: " | Write-Host -NoNewline
+            "Trusted" -f $file.Name | Write-Host -f Green
+        }
+
+        # Verify certificate is not expired
+        if ($cert.NotAfter -lt (Get-Date)) {
+            "Certificate expiration status: " | Write-Host -NoNewline
+            "Expired" | Write-Host -f Red
+            "Certificate verification failed. The module's authenticity could not be confirmed. Aborting operation." | Write-Host -f Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+        else {
+            "Certificate expiration status: " | Write-Host -NoNewline
+            "Not expired" | Write-Host -f Green
+        }
+        
+
+        Write-Host "Verification completed" -ForegroundColor Cyan
+    }
+
+    # If all checks pass
+    Write-Host "HPECOMCmdlets module verification successful. All signatures, certificates, and metadata are valid."
+    Write-Host "Proceeding to import module..."
 }
-
-# If all checks pass
-Write-Host "HPECOMCmdlets module verification successful. All signatures, certificates, and metadata are valid."
-Write-Host "Proceeding to import module..."
 
 # Import the HPECOMCmdlets module 
 Import-Module HPECOMCmdlets
