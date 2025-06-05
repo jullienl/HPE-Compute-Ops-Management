@@ -116,7 +116,7 @@ Note:
 Example 1: Pre-checking before onboarding
 
 ```powershell
-.\Prepare-and-Connect-iLOs-to-COM.ps1 -Check
+.\Prepare-and-Connect-iLOs-to-COM-v2.ps1 -Check
 ```
 
 Output:
@@ -203,7 +203,7 @@ Output:
 Example 2: Onboarding
 
 ```powershell
-.\Prepare-and-Connect-iLOs-to-COM.ps1  
+.\Prepare-and-Connect-iLOs-to-COM-v2.ps1  
 ```
 
 Output:
