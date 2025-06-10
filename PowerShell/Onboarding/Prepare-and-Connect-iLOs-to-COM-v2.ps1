@@ -2,7 +2,12 @@
 .SYNOPSIS
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
-June 4, 2025:
+June 10, 2025:
+ - Fixed a bug where the script could select a COM activation key without an associated subscription key, which caused license assignment failures during onboarding. The script now ensures that only activation keys with valid subscription assignments are used.
+ - Fixed a bug where the script did not always generate a new COM activation key with a valid subscription key, leading to onboarding failures. The script now always generates a new activation key that is properly associated with a subscription.
+ - The script now verifies that the COM activation key will remain valid for at least 10 minutes before use, preventing onboarding failures due to imminent key expiration.
+
+ June 4, 2025:
  - Improved session reliability: The script now actively maintains the HPE GreenLake session throughout execution to prevent timeouts that could disrupt operations.
  - Enhanced documentation: Added guidance in the script header for optimizing performance during large-scale server onboarding and reducing firmware update delays.
  - Module management improvements: The script always installs and uses the latest version of HPEiLOCmdlets, ensuring compatibility with PowerShell 7.5.0 and resolving known PSCredential login issues.
@@ -2667,13 +2672,28 @@ ForEach ($iLO in $iLOs) {
             If ($SecureGateway) {
 
                 # Check if a Secure gateway activation key already exists
-                $ExistingSecureGatewayActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | Where-Object { $_.applianceName } | Select-Object -First 1 -ExpandProperty ActivationKey
-            
-                # Generate a new activation key (valid for 1 day) if none exists
+                # Get the most recent activation key that has a subscription key and will not expire in 10 minutes
+                $ExistingSecureGatewayActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | Where-Object { $_.applianceName -and $_.SubscriptionKey -and $_.expiresAt -gt (Get-Date).AddMinutes(10) } |
+                Sort-Object expiresAt -Descending |
+                Select-Object -First 1 -ExpandProperty ActivationKey
+
                 if (-not $ExistingSecureGatewayActivationKey) {
-                
-                    $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -ExpirationInHours 24 -SecureGateway $SecureGateway -Verbose:$Verbose -ErrorAction Stop
-    
+
+                    "[Workspace: {0}] - No existing COM activation key found matching criteria. Generating a new one." -f $WorkspaceName | Write-Host -ForegroundColor Yellow
+                    
+                    # Get a valid subscription key for the server
+                    # Show only the first subscription key with available quantity
+                    $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop | select -First 1 -ExpandProperty key
+                    
+                    if (-not $SubscriptionKey) {
+                        "[Workspace: {0}] - Error retrieving a valid subscription key for the server. Please check your configuration and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
+                        Read-Host -Prompt "Hit return to close" 
+                        exit
+                    }
+                    
+                    # Generate a new activation key (valid for 24 hours) if none exists
+                    $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -ExpirationInHours 24 -SecureGateway $SecureGateway -SubscriptionKey $SubscriptionKey -Verbose:$Verbose -ErrorAction Stop
+
                     if ($COMActivationKey) {
                         "[Workspace: {0}] - Successfully generated COM secure gateway activation key '{1}' for region '{2}'." -f $WorkspaceName, $COMActivationKey, $Region | Write-Host -f Green
                     }
@@ -2693,13 +2713,28 @@ ForEach ($iLO in $iLOs) {
             else {
 
                 # Check if an activation key already exists
-                $ExistingActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | Select-Object -First 1 -ExpandProperty ActivationKey
-            
-                # Generate a new activation key (valid for 1 day) if none exists
+                # Get the most recent activation key that has a subscription key and will not expire in 10 minutes
+                $ExistingActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | Where-Object { $_.SubscriptionKey -and $_.expiresAt -gt (Get-Date).AddMinutes(10) } |
+                Sort-Object expiresAt -Descending |
+                Select-Object -First 1 -ExpandProperty ActivationKey
+
                 if (-not $ExistingActivationKey) {
-                
-                    $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -ExpirationInHours 24 -Verbose:$Verbose -ErrorAction Stop
-    
+
+                    "[Workspace: {0}] - No existing COM activation key found matching criteria. Generating a new one." -f $WorkspaceName | Write-Host -ForegroundColor Yellow
+                    
+                    # Get a valid subscription key for the server
+                    # Show only the first subscription key with available quantity
+                    $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop | select -First 1 -ExpandProperty key
+                    
+                    if (-not $SubscriptionKey) {
+                        "[Workspace: {0}] - Error retrieving a valid subscription key for the server. Please check your configuration and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
+                        Read-Host -Prompt "Hit return to close" 
+                        exit
+                    }
+
+                    # Generate a new activation key (valid for 24 hours) if none exists
+                    $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -ExpirationInHours 24 -SubscriptionKey $SubscriptionKey -Verbose:$Verbose -ErrorAction Stop
+
                     if ($COMActivationKey) {
                         "[Workspace: {0}] - Successfully generated COM activation key '{1}' for region '{2}'." -f $WorkspaceName, $COMActivationKey, $Region | Write-Host -f Green
                     }
