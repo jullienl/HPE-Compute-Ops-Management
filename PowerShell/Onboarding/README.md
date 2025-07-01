@@ -103,23 +103,38 @@ For detailed information about all changes and improvements, refer to the `.WHAT
 
 1. Create a CSV file with the list of iLO IP addresses or resolvable hostnames to be connected to COM. The CSV file must have a header "IP" and contain the iLO IP addresses or hostnames in the first column.
     - Example:
+
+        ```cs
         IP
-        192.168.0.20
-        192.168.0.21
-        192.168.1.56
+        192.168.0.100
+        192.168.0.101
+        192.168.0.102
+        ```   
     - Note: The first line is the header and must be "IP".
-2. Update the variables in the script as needed.
-    - Path to the CSV file containing the list of iLO IP addresses or resolvable hostnames
-    - Path to the iLO firmware flash files for iLO5 and iLO6.
-    - Username of the iLO account.
-    - DNS servers to configure in iLO (optional).
-    - SNTP servers to configure in iLO (optional).
-    - iLO Web Proxy or Secure Gateway settings (optional). Note that you cannot use both web proxy variables and Secure Gateway variables simultaneously! 
-    - HPE GreenLake account with HPE GreenLake and COM administrative privileges.
-    - HPE GreenLake workspace name where the COM instance is provisioned.
-    - Region where the COM instance is provisioned.
-    - Location name where the devices will be assigned (optional).
-    - Tags to assign to devices (optional).
+2. Review and update the variables in the "Variables definition" section of the script as needed.
+    
+    All configuration variables are defined near the top of the script, in the section labeled:
+
+    `#Region --------------------------- Variables definition -------------------------------------------`
+    
+    Update the following variables according to your environment:
+
+     - Path to the CSV file containing the list of iLO IP addresses or resolvable hostnames.
+     - Path to the iLO firmware flash files for iLO5 and iLO6.
+     - Username of the iLO account.
+     - DNS servers to configure in iLO (optional).
+     - SNTP servers to configure in iLO (optional).
+     - iLO Web Proxy or Secure Gateway settings (optional).
+        - Note: The Secure Gateway must be pre-configured in your COM instance before running this script.
+        - You cannot use both web proxy variables and Secure Gateway variables simultaneously.
+     - HPE GreenLake account with HPE GreenLake and COM administrative privileges.
+     - HPE GreenLake workspace name where the COM instance is provisioned.
+     - Region where the COM instance is provisioned.
+     - Location name where the devices will be assigned (optional).
+        - Note: The location must be created in the HPE GreenLake workspace before running this script.
+     - Tags to assign to devices (optional).
+
+    All these variables are clearly marked and documented in the "Variables definition" section for easy customization.
 3. Run the script in a PowerShell 7 environment.
 4. Review the output to ensure that the iLOs are successfully connected to COM.
 
