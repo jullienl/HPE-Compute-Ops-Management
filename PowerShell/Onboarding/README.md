@@ -62,49 +62,64 @@ The script can be run with the following parameters:
 
 **Requirements:**
 
-- PowerShell 7 (versions lower than 7.5.0 due to a known issue with the HPEiLOCmdlets module with .NET SDK 9 used in versions 7.5.0 and later).
+- PowerShell 7.
 - PowerShell Modules:
-  - HPEiLOCmdlets (https://www.powershellgallery.com/packages/HPEiLOCmdlets)
-    - Used to connect to iLOs and perform iLO configuration tasks.
-    - Automatically installed if not already present.
-    - Authenticity and integrity of the module are verified before use.
-  - HPECOMCmdlets (https://www.powershellgallery.com/packages/HPECOMCmdlets)
-    - Used to connect to HPE GreenLake and COM and to perform configuration tasks.
-    - Automatically installed if not already present.
-    - Authenticity and integrity of the module are verified before use.
-- Network access to both HPE GreenLake and the HPE iLOs.
-- The servers you want to add and configure are not assigned to other COM service instances in the same workspace or a different workspace.
-- HPE GreenLake user account:
-  - With the HPE GreenLake Workspace Administrator or Workspace Operator role.
-  - If you use custom HPE GreenLake roles, ensure that the user account has the HPE GreenLake Devices and Subscription Service Edit permission.
-  - With the Compute Ops Management Administrator or Operator role.
-- HPE GreenLake already set up with:
-  - A workspace where a COM service instance is provisioned.
-  - A COM subscription with enough licenses to support the number of iLOs defined in the CSV file.
-  - A location to support automated HPE support case creation and services.
-- iLO correctly set and accessible from the network with:
-  - An IP address
-  - An iLO account with Administrator privileges or at least the Configure iLO Settings privilege.
-  - The password of the iLO account.
+    - HPEiLOCmdlets (https://www.powershellgallery.com/packages/HPEiLOCmdlets)
+        - Required for connecting to HPE iLOs and performing all iLO configuration and management tasks.
+        - The script automatically installs and uses the latest available version to ensure compatibility and access to the newest features and bug fixes.
+        - Minimum supported version: 5.1.0.0 (earlier versions are not supported due to known issues).
+        - On Windows systems, the script verifies the authenticity and integrity of the module before use to ensure only trusted code is executed.
+    - HPECOMCmdlets (https://www.powershellgallery.com/packages/HPECOMCmdlets)
+        - Required for connecting to HPE GreenLake and Compute Ops Management, and for performing all related configuration and management tasks.
+        - The script automatically installs and uses the latest available version to ensure compatibility and access to the newest features and bug fixes.
+        - On Windows systems, the script verifies the authenticity and integrity of the module before use to ensure only trusted code is executed.
+- Ensure network access to both HPE GreenLake and all target HPE iLOs.
+- Verify that the servers to be onboarded are not already assigned to another COM service instance in any workspace.
+- HPE GreenLake user account requirements:
+    - Must have the Workspace Administrator or Workspace Operator role.
+    - If using custom roles, the account must have "Devices and Subscription Service Edit" permission.
+    - Must also have the COM Administrator or Operator role.
+- HPE GreenLake environment must have:
+    - A workspace with a provisioned COM service instance.
+    - An active COM subscription with sufficient licenses for all iLOs listed in the CSV file.
+    - A defined location (required for automated HPE support case creation and services).
+    - A Secure Gateway added to the COM instance (if applicable).
+- iLO requirements:
+    - Each iLO must have a reachable IP address.
+    - An iLO account with Administrator privileges, or at minimum, the "Configure iLO Settings" privilege.
+    - The password for the iLO account.
 
 **How to use:**
 
-1. Update the variables in the script as needed.
+1. Create a CSV file with the list of iLO IP addresses or resolvable hostnames to be connected to COM. The CSV file must have a header "IP" and contain the iLO IP addresses or hostnames in the first column.
+    - Example:
+        IP
+        192.168.0.20
+        192.168.0.21
+        192.168.1.56
+    - Note: The first line is the header and must be "IP".
+2. Update the variables in the script as needed.
     - Path to the CSV file containing the list of iLO IP addresses or resolvable hostnames
     - Path to the iLO firmware flash files for iLO5 and iLO6.
     - Username of the iLO account.
     - DNS servers to configure in iLO (optional).
     - SNTP servers to configure in iLO (optional).
-    - iLO Web Proxy or Secure Gateway settings (optional).
-    - HPE GreenLake account with HPE GreenLake and Compute Ops Management administrative privileges.
+    - iLO Web Proxy or Secure Gateway settings (optional). Note that you cannot use both web proxy variables and Secure Gateway variables simultaneously! 
+    - HPE GreenLake account with HPE GreenLake and COM administrative privileges.
     - HPE GreenLake workspace name where the COM instance is provisioned.
     - Region where the COM instance is provisioned.
     - Location name where the devices will be assigned (optional).
     - Tags to assign to devices (optional).
-2. Run the script in a PowerShell 7 environment.
-3. Review the output to ensure that the iLOs are successfully connected to COM.
+3. Run the script in a PowerShell 7 environment.
+4. Review the output to ensure that the iLOs are successfully connected to COM.
 
-**Note:** The script can be run multiple times with different CSV files to assign different tags or locations to servers.
+**Note**: 
+- The script can be run multiple times with different CSV files to assign different tags or locations to servers.
+- Firmware updates can take significantly longer when the iLO firmware binary is not located on the local network, due to slower file transfer speeds. 
+  To optimize the process, make sure the iLO firmware binary is accessible on the same local network as your iLOs. 
+  This typically allows updates to complete more quickly and significantly reduces overall delays.
+- To accelerate onboarding through parallel processing, consider splitting your list of iLOs into multiple CSV files and running several instances of the script simultaneously, each with a different CSV file.
+
 
 **Example 1: Pre-checking before onboarding**
 
