@@ -2,6 +2,7 @@
 .SYNOPSIS
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
+.WHATSNEW
 July 1, 2025:
  - Added general improvements and bug fixes to the entire script.
  - Added special logic for A55/A56 server hardware platforms (Gen11) to handle compatibility between iLO firmware and system ROM versions, per customer advisory: https://support.hpe.com/hpesc/public/docDisplay?docId=emr_na-a00143446en_us.
