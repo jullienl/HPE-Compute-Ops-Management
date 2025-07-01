@@ -15,7 +15,7 @@ June 10, 2025:
  - Fixed a bug where the script did not always generate a new COM activation key with a valid subscription key, leading to onboarding failures. The script now always generates a new activation key that is properly associated with a subscription.
  - The script now verifies that the COM activation key will remain valid for at least 10 minutes before use, preventing onboarding failures due to imminent key expiration.
 
- June 4, 2025:
+June 4, 2025:
  - Improved session reliability: The script now actively maintains the HPE GreenLake session throughout execution to prevent timeouts that could disrupt operations.
  - Enhanced documentation: Added guidance in the script header for optimizing performance during large-scale server onboarding and reducing firmware update delays.
  - Module management improvements: The script always installs and uses the latest version of HPEiLOCmdlets, ensuring compatibility with PowerShell 7.5.0 and resolving known PSCredential login issues.
@@ -107,11 +107,14 @@ How to use:
     - Username of the iLO account.
     - DNS servers to configure in iLO (optional).
     - SNTP servers to configure in iLO (optional).
-    - iLO Web Proxy or Secure Gateway settings (optional). Note that you cannot use both web proxy variables and Secure Gateway variables simultaneously! 
+    - iLO Web Proxy or Secure Gateway settings (optional). 
+      - Note: The Secure Gateway must be pre-configured in your COM instance before running this script.
+      - Note that you cannot use both web proxy variables and Secure Gateway variables simultaneously! 
     - HPE GreenLake account with HPE GreenLake and COM administrative privileges.
     - HPE GreenLake workspace name where the COM instance is provisioned.
     - Region where the COM instance is provisioned.
-    - Location name where the devices will be assigned (optional).
+    - Location name where the devices will be assigned (optional). 
+      - Note: The location must be created in the HPE GreenLake workspace before running this script.
     - Tags to assign to devices (optional).
 3. Run the script in a PowerShell 7 environment.
 4. Review the output to ensure that the iLOs are successfully connected to COM.
@@ -371,53 +374,90 @@ param (
 
 #Region -------------------------------------------------------- Variables definition -----------------------------------------------------------------------------------------
 
+# ========================================================================================================
+# REQUIRED CONFIGURATION - Update these variables before running the script
+# ========================================================================================================
+
 # Path to the CSV file containing the list of iLO IP addresses or resolvable hostnames
+# The CSV file must have a header "IP" and contain one iLO IP address or hostname per line
 $iLOcsvPath = "Z:\Onboarding\iLOs.csv"
 
 # Path to the iLO firmware flash files for iLO5 and iLO6
-$iLO5binFile = "Z:\Onboarding\ilo5_309.bin"
-$iLO6binFile = "Z:\Onboarding\ilo6_166.bin"
+# Download the latest firmware from HPE Support Center: https://support.hpe.com
+$iLO5binFile = "Z:\Onboarding\ilo5_309.bin"  # iLO5 firmware v3.09 or later
+$iLO6binFile = "Z:\Onboarding\ilo6_166.bin"  # iLO6 firmware v1.66 or later
 
-# Username of the iLO account
+# iLO account credentials
+# This account must have Administrator privileges or at minimum "Configure iLO Settings" privilege
 $iLOUserName = "administrator"
 
+# HPE GreenLake workspace configuration
+# Update these values to match your HPE GreenLake environment
+$WorkspaceName = "HPE"                       # HPE GreenLake workspace name
+$Region = "eu-central"                       # COM instance region (us-west, eu-central, ap-northeast, etc.)
+
+# ========================================================================================================
+# OPTIONAL CONFIGURATION - Comment out or modify as needed
+# ========================================================================================================
+
 # DNS servers to configure in iLO (optional)
+# Uncomment and modify to configure DNS servers in iLO
+# Note: DNS configuration helps ensure iLOs can reach the HPE GreenLake cloud platform
 $DNSservers = , @("192.168.2.1", "192.168.2.3")
 $DNStypes = , @("Primary", "Secondary")
 
 # SNTP servers to configure in iLO (optional)
+# Uncomment and modify to configure SNTP servers in iLO
+# Note: Accurate time synchronization is crucial for secure mTLS connections between COM and iLO
 $SNTPservers = , @("1.1.1.1", "2.2.2.2")
 
-# Note: You cannot use both web proxy variables and Secure Gateway variables simultaneously! 
-# iLO Web Proxy (optional) 
+# ========================================================================================================
+# NETWORK CONNECTIVITY OPTIONS - Use either Web Proxy OR Secure Gateway, not both
+# ========================================================================================================
+
+# Option 1: iLO Web Proxy settings (optional)
+# Uncomment and configure if your iLOs require a web proxy to reach the internet
 # $WebProxyServer = "web-proxy.domain.com"
 # $WebProxyPort = "8088"
 # $WebProxyUsername = "myproxyuser"
 # $WebProxyPassword = (Read-Host -AsSecureString "Enter password for proxy account '$WebProxyUsername'")
 
-# Secure Gateway FQDN (optional)
+# Option 2: Secure Gateway FQDN (optional)
+# Uncomment and configure if using HPE Secure Gateway for COM connectivity
+# Note: The Secure Gateway must be pre-configured in your COM instance before running this script
 # $SecureGateway = "sg01.domain.lab"
 
-# HPE GreenLake account with HPE GreenLake and Compute Ops Management administrative privileges
-# Non-SAML OKTA user account:
+# ========================================================================================================
+# HPE GREENLAKE AUTHENTICATION CONFIGURATION
+# ========================================================================================================
+
+# HPE GreenLake account with appropriate administrative privileges
+# Required roles: Workspace Administrator/Operator + COM Administrator/Operator
+
+# Option 1: Standard HPE GreenLake account (non-SAML)
 $HPEAccount = "email@domain.com"
 $OktaSSOEmail = $false 
-# SAML OKTA user account:
+
+# Option 2: SAML/OKTA SSO account
+# Uncomment the following lines and comment out the lines above if using SAML SSO
 # $HPEAccount = "firstname.lastname@hpe.com"
 # $OktaSSOEmail = $true 
 
-# HPE GreenLake workspace name where the Compute Ops Management instance is provisioned
-$WorkspaceName = "HPE"
+# ========================================================================================================
+# DEVICE ASSIGNMENT CONFIGURATION (Optional)
+# ========================================================================================================
 
-# Region where the Compute Ops Management instance is provisioned
-$Region = "eu-central"
-
-# Location name where the devices will be assigned (optional)
-# (Required for automated HPE support case creation and services)
+# Location assignment (optional but recommended)
+# Required for automated HPE support case creation and services
+# Note: The location must exist in your HPE GreenLake workspace before running this script
+# Comment out the following line to skip location assignment
 $LocationName = "Mougins"
 
-# Tags to assign to devices (optional)
-$Tags = "Country=FR, App=AI, Department=IT" 
+# Device tags (optional)
+# Assign custom tags to help organize and categorize your servers
+# Tags must be defined as a comma-separated string (e.g., "Environment=Production, Department=IT, Owner=TeamA")
+# Comment out the following line to skip tag assignment
+$Tags = "Country=FR, App=AI, Department=IT"
 
 #EndRegion
 
