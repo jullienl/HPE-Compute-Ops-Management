@@ -60,7 +60,7 @@ The script can be run with the following parameters:
 
 **Note:** The script requires the HPEiLOCmdlets and HPECOMCmdlets PowerShell modules to connect to iLOs and HPE GreenLake, respectively. The two modules are automatically installed if not already present.
 
-**Requirements:**
+## Requirements
 
 - PowerShell 7.
 - PowerShell Modules:
@@ -89,7 +89,7 @@ The script can be run with the following parameters:
     - An iLO account with Administrator privileges, or at minimum, the "Configure iLO Settings" privilege.
     - The password for the iLO account.
 
-**How to use:**
+## How to use 
 
 1. Create a CSV file with the list of iLO IP addresses or resolvable hostnames to be connected to COM. The CSV file must have a header "IP" and contain the iLO IP addresses or hostnames in the first column.
     - Example:
@@ -120,6 +120,8 @@ The script can be run with the following parameters:
   This typically allows updates to complete more quickly and significantly reduces overall delays.
 - To accelerate onboarding through parallel processing, consider splitting your list of iLOs into multiple CSV files and running several instances of the script simultaneously, each with a different CSV file.
 
+
+## Examples
 
 **Example 1: Pre-checking before onboarding**
 
