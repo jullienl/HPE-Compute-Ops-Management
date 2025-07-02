@@ -3,6 +3,11 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+July 2, 2025
+ - Added many improvements and bug fixes to the entire script.
+ - Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script.
+ - Improved on-screen reporting for "Unsupported/Skipped" servers, clearly indicating when a server is skipped and providing the specific reason for skipping.
+
 July 1, 2025:
  - Added general improvements and bug fixes to the entire script.
  - Added special logic for A55/A56 server hardware platforms (Gen11) to handle compatibility between iLO firmware and system ROM versions, per customer advisory: https://support.hpe.com/hpesc/public/docDisplay?docId=emr_na-a00143446en_us.
@@ -10,12 +15,12 @@ July 1, 2025:
  - Fixed CSV export to always generate the file in the script directory and prevent duplicate reports.
  - The authenticity and integrity verification output for the modules has been streamlined to display only essential information and critical alerts.
 
-June 10, 2025:
+ June 10, 2025:
  - Fixed a bug where the script could select a COM activation key without an associated subscription key, which caused license assignment failures during onboarding. The script now ensures that only activation keys with valid subscription assignments are used.
  - Fixed a bug where the script did not always generate a new COM activation key with a valid subscription key, leading to onboarding failures. The script now always generates a new activation key that is properly associated with a subscription.
  - The script now verifies that the COM activation key will remain valid for at least 10 minutes before use, preventing onboarding failures due to imminent key expiration.
 
-June 4, 2025:
+ June 4, 2025:
  - Improved session reliability: The script now actively maintains the HPE GreenLake session throughout execution to prevent timeouts that could disrupt operations.
  - Enhanced documentation: Added guidance in the script header for optimizing performance during large-scale server onboarding and reducing firmware update delays.
  - Module management improvements: The script always installs and uses the latest version of HPEiLOCmdlets, ensuring compatibility with PowerShell 7.5.0 and resolving known PSCredential login issues.
@@ -838,32 +843,40 @@ Import-Module HPECOMCmdlets
 #Region -------------------------------------------------------- Connection to HPE GreenLake -----------------------------------------------------------------------------------------
 
 try {
-    # Check if already connected to HPE GreenLake
-    Get-HPEGLWorkspace -ShowCurrent -Verbose:$Verbose -ErrorAction Stop | Out-Null
+    # Check if already connected to COM
+    Get-HPECOMServer -Region $Region -Verbose:$Verbose -ErrorAction Stop | Out-Null
 }
 catch {
-    if ($OktaSSOEmail) {
-        # Connect to HPE GreenLake workspace using SAML SSO
-        $GLPConnection = Connect-HPEGL -SSOEmail $HPEAccount -Workspace $WorkspaceName -Verbose:$Verbose
-    }
-    else {
-        # Ask for password
-        $HPEAccountSecuredPassword = Read-Host -AsSecureString "Enter password for your HPE GreenLake account '$HPEAccount'"
-        $GLPcredentials = New-Object System.Management.Automation.PSCredential ($HPEAccount, $HPEAccountSecuredPassword)
-        # Connect to HPE GreenLake workspace
-        $GLPConnection = Connect-HPEGL -Credential $GLPcredentials -Workspace $WorkspaceName -Verbose:$Verbose
-    }
-}
-  
-if ($GLPConnection -or $HPEGreenLakeSession) {
-    "`n[Workspace: {0}] - Successfully connected to the HPE GreenLake workspace." -f $WorkspaceName | Write-Host -ForegroundColor Green
+    # If not connected, connect to HPE GreenLake workspace
+    try {
+        if ($OktaSSOEmail) {
+            # Connect to HPE GreenLake workspace using SAML SSO
+            $GLPConnection = Connect-HPEGL -SSOEmail $HPEAccount -Workspace $WorkspaceName -Verbose:$Verbose
+        }
+        else {
+            # Ask for password
+            $HPEAccountSecuredPassword = Read-Host -AsSecureString "Enter password for your HPE GreenLake account '$HPEAccount'"
+            $GLPcredentials = New-Object System.Management.Automation.PSCredential ($HPEAccount, $HPEAccountSecuredPassword)
+            # Connect to HPE GreenLake workspace
+            $GLPConnection = Connect-HPEGL -Credential $GLPcredentials -Workspace $WorkspaceName -Verbose:$Verbose
+        }
 
-}
-else {
-    "[Workspace: {0}] - Error connecting to the HPE GreenLake workspace. Please check your credentials and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
-    Read-Host -Prompt "Hit return to close" 
-    exit
-}
+        if ($GLPConnection) {
+            "`n[Workspace: {0}] - Successfully connected to the HPE GreenLake workspace." -f $WorkspaceName | Write-Host -ForegroundColor Green
+        
+        }
+        else {
+            "[Workspace: {0}] - Error connecting to the HPE GreenLake workspace. Please check your credentials and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
+            Read-Host -Prompt "Hit return to close" 
+            exit
+        }
+    }
+    catch {
+        "[Workspace: {0}] - Error connecting to the HPE GreenLake workspace. Status: {1}" -f $WorkspaceName, $_ | Write-Host -ForegroundColor Red
+        Read-Host -Prompt "Hit return to close" 
+        exit
+    }
+} 
 
 #EndRegion
 
@@ -1064,35 +1077,41 @@ ForEach ($iLO in $iLOs) {
     $iLOConnection = $False
 
     $objStatus = [pscustomobject]@{  
-        iLO                       = $Ilo.IP
-        Hostname                  = $Null
-        SerialNumber              = $Null
-        PartNumber                = $Null
-        iLOGeneration             = $Null
-        iLOFirmwareVersion        = $Null
-        ServerModel               = $Null
-        ServerGeneration          = $Null
-        ServerSystemROM           = $Null
-        ServerSystemROMVersion    = $Null
-        ServerSystemROMFamily     = $Null
-        Status                    = $Null
-        Details                   = $Null
-        DNSSettingsStatus         = $Null
-        DNSSettingsDetails        = $Null
-        NTPSettingsStatus         = $Null
-        NTPSettingsDetails        = $Null
-        ProxySettingsStatus       = $Null
-        ProxySettingsDetails      = $Null
-        FirmwareStatus            = $Null
-        FirmwareDetails           = $Null
-        iLOConnectionStatus       = $Null
-        iLOConnectionDetails      = $Null
-        TagsAssignmentStatus      = $Null
-        TagsAssignmentDetails     = $Null
-        LocationAssignmentStatus  = $Null
-        LocationAssignmentDetails = $Null
-        OnboardingType            = $Null
-        Exception                 = $Null
+        iLO                            = $Ilo.IP
+        Status                         = $Null
+        Details                        = $Null
+        Hostname                       = $Null
+        SerialNumber                   = $Null
+        PartNumber                     = $Null
+        iLOGeneration                  = $Null
+        iLOFirmwareVersion             = $Null
+        ServerModel                    = $Null
+        ServerGeneration               = $Null
+        ServerSystemROM                = $Null
+        ServerSystemROMVersion         = $Null
+        ServerSystemROMFamily          = $Null
+        DNSSettingsStatus              = $Null
+        DNSSettingsDetails             = $Null
+        NTPSettingsStatus              = $Null
+        NTPSettingsDetails             = $Null
+        ProxySettingsStatus            = $Null
+        ProxySettingsDetails           = $Null
+        FirmwareStatus                 = $Null
+        FirmwareDetails                = $Null
+        AddComputetoWorkspaceStatus    = $Null
+        AddComputetoWorkspaceDetails   = $Null
+        AddComputeToCOMInstanceStatus  = $Null
+        AddComputeToCOMInstanceDetails = $Null
+        AddCOMSubscriptionStatus       = $Null
+        AddCOMSubscriptionDetails      = $Null
+        iLOConnectionStatus            = $Null
+        iLOConnectionDetails           = $Null
+        TagsAssignmentStatus           = $Null
+        TagsAssignmentDetails          = $Null
+        LocationAssignmentStatus       = $Null
+        LocationAssignmentDetails      = $Null
+        OnboardingType                 = $Null
+        Exception                      = $Null
     }
 
     #EndRegion
@@ -1181,44 +1200,52 @@ ForEach ($iLO in $iLOs) {
 
         $objStatus.ServerSystemROM = $iLOConnection.TargetInfo.SystemROM.Split(" ")[0..1] -join " "
 
+        $iLOChassisInfo = Get-HPEiLOChassisInfo -Connection $iLOConnection -Verbose:$Verbose -ErrorAction Stop
+        $objStatus.SerialNumber = $iLOChassisInfo | Select-Object -ExpandProperty SerialNumber
+        $objStatus.PartNumber = $iLOChassisInfo | Select-Object -ExpandProperty SKU
+
         # List of server system ROM families that require a special onboarding process if iLO firmware is earlier than 1.62.
         # For these families, onboarding uses the workspace ID instead of a COM activation key.
         # - A55: HPE ProLiant DL365 Gen11 and HPE ProLiant DL385 Gen11
         # - A56: HPE ProLiant DL325 Gen11 and HPE ProLiant DL345 Gen11
+        # List of server system ROM families that require special onboarding logic
+        # - A55: HPE ProLiant DL365 Gen11 and HPE ProLiant DL385 Gen11
+        # - A56: HPE ProLiant DL325 Gen11 and HPE ProLiant DL345 Gen11
         $ImpactedServerSystemROMFamilies = @("A55", "A56")
 
-        if ($ImpactedServerSystemROMFamilies -contains $objStatus.ServerSystemROMFamily -and [version]$objStatus.iLOFirmwareVersion -le [version]"1.62" -and [version]$objStatus.ServerSystemROMVersion -le [version]"1.56") {
+        # Handle A55/A56 servers with specific firmware and system ROM version combinations
+        if ($ImpactedServerSystemROMFamilies -contains $objStatus.ServerSystemROMFamily) {
             
-            $objStatus.OnboardingType = "Workspace ID"
+            # Supported combination: iLO FW ≤ 1.62 AND System ROM ≤ 1.56 → Use Workspace ID
+            if ([version]$objStatus.iLOFirmwareVersion -le [version]"1.62" -and [version]$objStatus.ServerSystemROMVersion -le [version]"1.56") {
+                $objStatus.OnboardingType = "Workspace ID"
+            }
+            # Supported combination: iLO FW ≥ 1.63 AND System ROM ≥ 1.58 → Use PIN-based onboarding (Activation Key)
+            elseif ([version]$objStatus.iLOFirmwareVersion -ge [version]"1.63" -and [version]$objStatus.ServerSystemROMVersion -ge [version]"1.58") {
+                $objStatus.OnboardingType = "Activation Key"
+            }
+            # Any other version combination for A55/A56 servers → Skip and log as exception
+            else {
+                $objStatus.OnboardingType = "Unsupported"
+                $objStatus.Status = "Skipped"
+                $objStatus.Details = "Unsupported iLO firmware ($($objStatus.iLOFirmwareVersion)) and System ROM version ($($objStatus.ServerSystemROMVersion)) combination detected for A55/A56 platform! Only specific version combinations are supported. This server cannot be onboarded to COM. Skipping server..."
 
-        }
-        elseif ($ImpactedServerSystemROMFamilies -contains $objStatus.ServerSystemROMFamily -and [version]$objStatus.iLOFirmwareVersion -ge [version]"1.63" -and [version]$objStatus.ServerSystemROMVersion -ge [version]"1.58") {
-            
-            $objStatus.OnboardingType = "Activation Key"
-
-        }
-        elseif ($ImpactedServerSystemROMFamilies -contains $objStatus.ServerSystemROMFamily -and (
-                ([version]$objStatus.iLOFirmwareVersion -le [version]"1.62" -and [version]$objStatus.ServerSystemROMVersion -ge [version]"1.57") -or 
-                ([version]$objStatus.iLOFirmwareVersion -ge [version]"1.63" -and [version]$objStatus.ServerSystemROMVersion -le [version]"1.56")
-            )) {
-            
-            $objStatus.OnboardingType = "Unsupported"
-            $objStatus.Status = "Failed"
-            $objStatus.Details = "Unsupported iLO firmware and System ROM version combination detected! This server cannot be onboarded to COM. Skipping server..."
-            [void]$iLOPreparationStatus.Add($objStatus)
-            continue
-
+                "`n  - [{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6})" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Host
+                "`t - Onboarding method selected:" | Write-Host -NoNewline
+                " {0}" -f $objStatus.OnboardingType | Write-Host -ForegroundColor Cyan
+                "`t - Status: " | Write-Host -NoNewline
+                "{0}" -f $objStatus.Status | Write-Host -ForegroundColor Yellow
+                "`t`t - Details: " | Write-Host -NoNewline
+                "{0}" -f $objStatus.Details | Write-Host -ForegroundColor Yellow
+                [void]$iLOPreparationStatus.Add($objStatus)
+                continue
+            }
         }
         else {
             # This handles all non-A55/A56 servers with default Activation Key process
             $objStatus.OnboardingType = "Activation Key"
+        }       
 
-        }
-
-        
-        $iLOChassisInfo = Get-HPEiLOChassisInfo -Connection $iLOConnection -Verbose:$Verbose -ErrorAction Stop
-        $objStatus.SerialNumber = $iLOChassisInfo | Select-Object -ExpandProperty SerialNumber
-        $objStatus.PartNumber = $iLOChassisInfo | Select-Object -ExpandProperty SKU
 
         "`n  - [{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6})" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Host
         "`t - Onboarding method selected:" | Write-Host -NoNewline
@@ -1230,11 +1257,12 @@ ForEach ($iLO in $iLOs) {
         "`t - Connecting to iLO: " | Write-Host -NoNewline
         "Failed" | Write-Host -f Red
         $objStatus.Status = "Failed"
-        $objStatus.Details = "Error connecting to iLO. Error: $iLOConnection"
+        $objStatus.Details = "Error connecting to iLO. Error: $($iLOConnection)"
         [void]$iLOPreparationStatus.Add($objStatus)
         continue
     }
 
+    
     #EndRegion
 
     #Region Get DNS in iLO       
@@ -1255,9 +1283,9 @@ ForEach ($iLO in $iLOs) {
 
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO DNS settings. StatusInfo: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLONetworkSetting.StatusInfo.Message | Write-Verbose
 
-                $objStatus.DNSSettingsStatus = "Failed to retrieve iLO DNS settings."
-                $objStatus.DNSSettingsDetails = $iLONetworkSetting.StatusInfo.Message
-                $objStatus.Status = "Failed"
+                $objStatus.DNSSettingsStatus = "Failed"
+                $objStatus.DNSSettingsDetails = "Failed to retrieve iLO DNS settings. Error: $($iLONetworkSetting.StatusInfo.Message)"
+                
             }
             elseif ($Null -ne $sortedCurrentDNSServers) {
                                 
@@ -1295,7 +1323,7 @@ ForEach ($iLO in $iLOs) {
                         "{0}" -f $FormattedmissingDNSServers | Write-Host -ForegroundColor Yellow
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - DNS configuration is required. Missing: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedmissingDNSServers | Write-Verbose
                         $objStatus.DNSSettingsStatus = "Warning"
-                        $objStatus.DNSSettingsDetails = "DNS servers found: $FormattedCurrentDNSServers - Missing DNS servers: $FormattedmissingDNSServers"
+                        $objStatus.DNSSettingsDetails = "DNS servers found: $($FormattedCurrentDNSServers) - Missing DNS servers: $($FormattedmissingDNSServers)"
                     }
                     else {
                         "Ok" | Write-Host -f Green
@@ -1303,7 +1331,7 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Missing: " | Write-Host -NoNewline
                         "None" | Write-Host -ForegroundColor Green
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - DNS configuration is not required as the DNS servers are already correctly configured." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.DNSSettingsStatus = "Complete"
+                        $objStatus.DNSSettingsStatus = "Success"
                         $objStatus.DNSSettingsDetails = "DNS configuration is not required as the DNS servers are already correctly configured."
                     }
                 }    
@@ -1311,7 +1339,7 @@ ForEach ($iLO in $iLOs) {
                     "Ok" | Write-Host -f Green
                     "`t`t - Current: {0}" -f $FormattedCurrentDNSServers | Write-Host 
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - DNS configuration will be skipped as no DNS server configuration is requested." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                    $objStatus.DNSSettingsStatus = "Complete"
+                    $objStatus.DNSSettingsStatus = "Success"
                     $objStatus.DNSSettingsDetails = "DNS configuration will be skipped as no DNS server configuration is requested."
                 }
             }
@@ -1346,7 +1374,6 @@ ForEach ($iLO in $iLOs) {
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Warning: No DNS server defined! This may cause issues with iLO connectivity to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
                     $objStatus.DNSSettingsStatus = "Warning"
                     $objStatus.DNSSettingsDetails = "No DNS server defined! This may cause issues with iLO connectivity to COM."
-                    $objStatus.Status = "Failed"
                 }
             }                    
         }
@@ -1355,7 +1382,6 @@ ForEach ($iLO in $iLOs) {
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO DNS settings. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
             $objStatus.DNSSettingsStatus = "Failed"
             $objStatus.DNSSettingsDetails = $_
-            $objStatus.Status = "Failed"
         }
     }
 
@@ -1387,8 +1413,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Failed to retrieve iLO DNS settings. StatusInfo: {0}" -f $iLONetworkSetting.StatusInfo.Message | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO DNS settings. StatusInfo: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLONetworkSetting.StatusInfo.Message | Write-Verbose
-                $objStatus.DNSSettingsStatus = "Failed to retrieve iLO DNS settings."
-                $objStatus.DNSSettingsDetails = $iLONetworkSetting.StatusInfo.Message
+                $objStatus.DNSSettingsStatus = "Failed"
+                $objStatus.DNSSettingsDetails = "Failed to retrieve iLO DNS settings. Error: $($iLONetworkSetting.StatusInfo.Message)"
                 $objStatus.Status = "Failed"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
@@ -1400,8 +1426,8 @@ ForEach ($iLO in $iLOs) {
             "`t`t - Status: " | Write-Host -NoNewline
             "Failed to retrieve iLO DNS settings. Error: $_" | Write-Host -ForegroundColor Red
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO DNS settings. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-            $objStatus.DNSSettingsStatus = "Error configuring iLO DNS settings."
-            $objStatus.DNSSettingsDetails = $_
+            $objStatus.DNSSettingsStatus = "Failed"
+            $objStatus.DNSSettingsDetails = "Failed to retrieve iLO DNS settings. Error: $($_)"
             $objStatus.Status = "Failed"
             [void]$iLOPreparationStatus.Add($objStatus)
             continue
@@ -1460,7 +1486,7 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "DNS configuration is not required as the DNS servers are already defined." | Write-Host -ForegroundColor Green
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - DNS configuration is not required as the DNS servers are already defined." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.DNSSettingsStatus = "Skipped"
+                        $objStatus.DNSSettingsStatus = "Success"
                         $objStatus.DNSSettingsDetails = "DNS configuration is not required as the DNS servers are already defined."
                     }    
                 }
@@ -1493,7 +1519,7 @@ ForEach ($iLO in $iLOs) {
                             "`t`t - Status: " | Write-Host -NoNewline
                             "DNS settings set successfully!" | Write-Host -ForegroundColor Green
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - DNS settings set successfully!" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                            $objStatus.DNSSettingsStatus = "Complete"
+                            $objStatus.DNSSettingsStatus = "Success"
                             $objStatus.DNSSettingsDetails = "DNS settings set successfully!"
                         }
                         else {
@@ -1501,7 +1527,7 @@ ForEach ($iLO in $iLOs) {
                             "`t`t - Status: " | Write-Host -NoNewline
                             "Error configuring DNS settings. StatusInfo: {0}" -f $DNSupdate.StatusInfo.Message | Write-Host -ForegroundColor Red
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error configuring iLO DNS settings. Status: {7} - StatusInfo: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DNSupdate.Status, $DNSupdate.StatusInfo.Message | Write-Verbose
-                            $objStatus.DNSSettingsStatus = $DNSupdate.status
+                            $objStatus.DNSSettingsStatus = "Failed"
                             $objStatus.DNSSettingsDetails = "Error configuring iLO DNS settings. StatusInfo: $($DNSupdate.StatusInfo.Message)"
                             $objStatus.Status = "Failed"
                             [void]$iLOPreparationStatus.Add($objStatus)
@@ -1514,8 +1540,8 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Error configuring iLO DNS settings. Error: $_" | Write-Host -ForegroundColor Red
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error configuring iLO DNS settings. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                        $objStatus.DNSSettingsStatus = "Error configuring iLO DNS settings."
-                        $objStatus.DNSSettingsDetails = $_
+                        $objStatus.DNSSettingsStatus = "Failed"
+                        $objStatus.DNSSettingsDetails = "Error configuring iLO DNS settings. Error: $($_)"
                         $objStatus.Status = "Failed"
                         [void]$iLOPreparationStatus.Add($objStatus)
                         continue
@@ -1541,7 +1567,7 @@ ForEach ($iLO in $iLOs) {
                 "Skipped" | Write-Host -f Green
                 "`t`t - Current: {0}" -f $FormattedCurrentDNSServers | Write-Host
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - DNS configuration is not required as no DNS server configuration is requested." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.DNSSettingsStatus = "Complete"
+                $objStatus.DNSSettingsStatus = "Success"
                 $objStatus.DNSSettingsDetails = "DNS configuration is not required as no DNS server configuration is requested."
             }
         }
@@ -1564,9 +1590,8 @@ ForEach ($iLO in $iLOs) {
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO SNTP settings. StatusInfo: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $SNTPSetting.StatusInfo.Message | Write-Verbose
                 "Failed" | Write-Host -f Red
 
-                $objStatus.NTPSettingsStatus = "Failed to retrieve iLO SNTP settings."
-                $objStatus.NTPSettingsDetails = $SNTPSetting.StatusInfo.Message
-                $objStatus.Status = "Failed"
+                $objStatus.NTPSettingsStatus = "Failed"
+                $objStatus.NTPSettingsDetails = "Failed to retrieve iLO SNTP settings. Error: $($SNTPSetting.StatusInfo.Message)"
             }
             elseif ($Null -ne $sortedCurrentSNTPServers) {
 
@@ -1605,7 +1630,7 @@ ForEach ($iLO in $iLOs) {
                         "{0}" -f $FormattedmissingSNTPServers | Write-Host -ForegroundColor Yellow
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - SNTP configuration is required. Missing: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedmissingSNTPServers | Write-Verbose
                         $objStatus.NTPSettingsStatus = "Warning"
-                        $objStatus.NTPSettingsDetails = "SNTP servers found: $FormattedCurrentSNTPServers - Missing SNTP servers: $FormattedmissingSNTPServers"
+                        $objStatus.NTPSettingsDetails = "SNTP servers found: $($FormattedCurrentSNTPServers) - Missing SNTP servers: $($FormattedmissingSNTPServers)"
                     }
                     else {
                         "Ok" | Write-Host -f Green
@@ -1613,7 +1638,7 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Missing: " | Write-Host -NoNewline
                         "None" | Write-Host -ForegroundColor Green
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - SNTP configuration is not required as the SNTP servers are already correctly configured." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.NTPSettingsStatus = "Complete"
+                        $objStatus.NTPSettingsStatus = "Success"
                         $objStatus.NTPSettingsDetails = "SNTP configuration is not required as the SNTP servers are already correctly configured."
                     }
                 }    
@@ -1621,7 +1646,7 @@ ForEach ($iLO in $iLOs) {
                     "Ok" | Write-Host -f Green
                     "`t`t - Current: {0}" -f $FormattedCurrentSNTPServers | Write-Host 
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - SNTP configuration will be skipped as no SNTP server configuration is requested." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                    $objStatus.NTPSettingsStatus = "Complete"
+                    $objStatus.NTPSettingsStatus = "Success"
                     $objStatus.NTPSettingsDetails = "SNTP configuration will be skipped as no SNTP server configuration is requested."
                 }     
             }
@@ -1656,7 +1681,6 @@ ForEach ($iLO in $iLOs) {
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Warning: No SNTP server defined! This may cause issues with iLO connectivity to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
                     $objStatus.NTPSettingsStatus = "Warning"
                     $objStatus.NTPSettingsDetails = "No SNTP server defined! This may cause issues with iLO connectivity to COM."
-                    $objStatus.Status = "Failed"
                 }
             }
         
@@ -1666,7 +1690,6 @@ ForEach ($iLO in $iLOs) {
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO SNTP settings. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
             $objStatus.NTPSettingsStatus = "Failed"
             $objStatus.NTPSettingsDetails = $_
-            $objStatus.Status = "Failed"
         }
     }
 
@@ -1698,8 +1721,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Failed to retrieve iLO SNTP settings. StatusInfo: {0}" -f $iLONetworkSetting.StatusInfo.Message | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO SNTP settings. StatusInfo: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLONetworkSetting.StatusInfo.Message | Write-Verbose
-                $objStatus.NTPSettingsStatus = "Failed to retrieve iLO SNTP settings."
-                $objStatus.NTPSettingsDetails = $iLONetworkSetting.StatusInfo.Message
+                $objStatus.NTPSettingsStatus = "Failed"
+                $objStatus.NTPSettingsDetails = "Failed to retrieve iLO SNTP settings. Error: $($iLONetworkSetting.StatusInfo.Message)"
                 $objStatus.Status = "Failed"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
@@ -1774,7 +1797,7 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "SNTP configuration is not required as the SNTP servers are already defined." | Write-Host -ForegroundColor Green
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - SNTP configuration is not required as the SNTP servers are already defined." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.NTPSettingsStatus = "Skipped"
+                        $objStatus.NTPSettingsStatus = "Success"
                         $objStatus.NTPSettingsDetails = "SNTP configuration is not required as the SNTP servers are already defined."
                     }    
                 }
@@ -1806,7 +1829,7 @@ ForEach ($iLO in $iLOs) {
                             "`t`t - Status: " | Write-Host -NoNewline
                             "SNTP settings set successfully. Message: {0}" -f $SNTPupdate.StatusInfo.Message | Write-Host -ForegroundColor Green
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO SNTP settings set successfully. Message: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $SNTPupdate.StatusInfo.Message | Write-Verbose
-                            $objStatus.NTPSettingsStatus = "Complete"
+                            $objStatus.NTPSettingsStatus = "Success"
                             $objStatus.NTPSettingsDetails = "iLO SNTP settings set successfully."
             
                             if ($SNTPupdate.StatusInfo.Message -match "ResetRequired") {
@@ -1818,7 +1841,7 @@ ForEach ($iLO in $iLOs) {
                             "`t`t - Status: " | Write-Host -NoNewline
                             "Error configuring SNTP settings. StatusInfo: {0}" -f $SNTPupdate.StatusInfo.Message | Write-Host -ForegroundColor Red
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error configuring iLO SNTP settings. Status: {7} - StatusInfo: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $SNTPupdate.status, $SNTPupdate.StatusInfo.Message | Write-Verbose
-                            $objStatus.NTPSettingsStatus = $SNTPupdate.status
+                            $objStatus.NTPSettingsStatus = "Failed"
                             $objStatus.NTPSettingsDetails = "Error configuring iLO SNTP settings. StatusInfo: $($SNTPupdate.StatusInfo.Message)"
                             $objStatus.Status = "Failed"
                             [void]$iLOPreparationStatus.Add($objStatus)
@@ -1830,8 +1853,8 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Error configuring SNTP settings. Error: $_" | Write-Host -ForegroundColor Red
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error configuring iLO SNTP settings. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                        $objStatus.NTPSettingsStatus = "Error configuring iLO SNTP settings."
-                        $objStatus.NTPSettingsDetails = $_
+                        $objStatus.NTPSettingsStatus = "Failed"
+                        $objStatus.NTPSettingsDetails = "Error configuring iLO SNTP settings. Error: $($_)"
                         $objStatus.Status = "Failed"
                         [void]$iLOPreparationStatus.Add($objStatus)
                         continue
@@ -1854,7 +1877,7 @@ ForEach ($iLO in $iLOs) {
                             "`t`t - Status: " | Write-Host -NoNewline
                             "Error resetting iLO. Status: {0} - Details: {1}" -f $iLOResetStatus.Status, $iLOResetStatus.StatusInfo.Message | Write-Host -ForegroundColor Red
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error resetting iLO. Status: {7} - Details: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $iLOResetStatus.Status, $iLOResetStatus.StatusInfo.Message | Write-Verbose
-                            $objStatus.NTPSettingsStatus = $iLOResetStatus.Status
+                            $objStatus.NTPSettingsStatus = "Failed"
                             $objStatus.NTPSettingsDetails = "Error resetting iLO after SNTP settings set. StatusInfo: $($iLOResetStatus.StatusInfo.Message)"
                             $objStatus.Status = "Failed"
                             [void]$iLOPreparationStatus.Add($objStatus)
@@ -1918,7 +1941,7 @@ ForEach ($iLO in $iLOs) {
                             "`t`t - Status: " | Write-Host -NoNewline
                             "iLO SNTP settings updated successfully and iLO is back online." | Write-Host -ForegroundColor Green
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO SNTP settings updated successfully and iLO is back online." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                            $objStatus.NTPSettingsStatus = "Complete"
+                            $objStatus.NTPSettingsStatus = "Success"
                             $objStatus.NTPSettingsDetails = "iLO firmware updated successfully"
 
                             $iLOConnection = $False
@@ -1953,7 +1976,7 @@ ForEach ($iLO in $iLOs) {
                                     "Error connecting to iLO after the changes to SNTP configuration. Error: {0}" -f $iLOConnection | Write-Host -ForegroundColor Red
                                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting to iLO after the changes to SNTP configuration. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLOConnection | Write-Verbose
                                     $objStatus.NTPSettingsStatus = "Failed"
-                                    $objStatus.NTPSettingsDetails = "Unable to connect to iLO after $maxRetries retries following SNTP configuration reset. Please check the iLO status and network connectivity."
+                                    $objStatus.NTPSettingsDetails = "Unable to connect to iLO after $($maxRetries) retries following SNTP configuration reset. Please check the iLO status and network connectivity."
                                     $objStatus.Status = "Failed"
                                     [void]$iLOPreparationStatus.Add($objStatus)
                                     continue
@@ -1990,9 +2013,9 @@ ForEach ($iLO in $iLOs) {
                                 if ($retryCount -ge $maxRetries) {
                                     "`t`t - Status: " | Write-Host -NoNewline
                                     "The SNTP status could not be detected as 'OK' after '{0}' retries. Please check the iLO status and network connectivity." -f $maxRetries | Write-Host -ForegroundColor Red
-                                    "[{0}] - The SNTP status could not be detected as 'OK' after $maxRetries retries. Please check the iLO status and network connectivity." -f $iLO.IP | Write-Verbose
+                                    "[{0}] - The SNTP status could not be detected as 'OK' after $($maxRetries) retries. Please check the iLO status and network connectivity." -f $iLO.IP | Write-Verbose
                                     $objStatus.NTPSettingsStatus = "Failed"
-                                    $objStatus.NTPSettingsDetails = "The SNTP status could not be detected as 'OK' after $maxRetries retries. Please check the iLO status and network connectivity."
+                                    $objStatus.NTPSettingsDetails = "The SNTP status could not be detected as 'OK' after $($maxRetries) retries. Please check the iLO status and network connectivity."
                                     $objStatus.Status = "Failed"
                                     [void]$iLOPreparationStatus.Add($objStatus)
                                     continue
@@ -2014,8 +2037,8 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Error resetting iLO after the changes to SNTP configuration. Error: $_" | Write-Host -ForegroundColor Red
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error resetting iLO after the changes to SNTP configuration. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                        $objStatus.NTPSettingsStatus = "Error resetting iLO after the changes to SNTP configuration."
-                        $objStatus.NTPSettingsDetails = $_
+                        $objStatus.NTPSettingsStatus = "Failed"
+                        $objStatus.NTPSettingsDetails = "Error resetting iLO after the changes to SNTP configuration. Error: $($_)"
                         $objStatus.Status = "Failed"
                         [void]$iLOPreparationStatus.Add($objStatus)
                         continue
@@ -2042,7 +2065,7 @@ ForEach ($iLO in $iLOs) {
                 "Skipped" | Write-Host -f Green
                 "`t`t - Current: {0}" -f $FormattedCurrentSNTPServers | Write-Host
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - SNTP configuration is not required as no SNTP server configuration is requested." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.NTPSettingsStatus = "Complete"
+                $objStatus.NTPSettingsStatus = "Success"
                 $objStatus.NTPSettingsDetails = "SNTP configuration is not required as no SNTP server configuration is requested."
             }
         }   
@@ -2065,8 +2088,9 @@ ForEach ($iLO in $iLOs) {
                 "{0}" -f $objStatus.iLOFirmwareVersion | Write-Host -ForegroundColor Yellow
                 "`t`t - Required: 3.09 or later" | Write-Host 
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO5 firmware version lower than v3.09 is not supported by COM activation key. Firmware update will be needed." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.FirmwareStatus = "Firmware update will be needed."
-                $objStatus.FirmwareDetails = "iLO5 firmware version lower than v3.09 is not supported by COM activation key."
+                $objStatus.FirmwareStatus = "Warning"
+                $objStatus.FirmwareDetails = "Firmware update will be needed. iLO5 firmware version lower than v3.09 is not supported by COM activation key."
+
             }                   
             else {
                 "OK" | Write-Host -f Green               
@@ -2074,8 +2098,8 @@ ForEach ($iLO in $iLOs) {
                 "{0}" -f $objStatus.iLOFirmwareVersion | Write-Host -ForegroundColor Green
                 "`t`t - Required: 3.09 or later" | Write-Host 
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO5 FW fully supported by COM. Firmware update will be skipped." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.FirmwareStatus = "iLO5 firmware fully supported by COM."
-                $objStatus.FirmwareDetails = "Firmware update will be skipped."
+                $objStatus.FirmwareStatus = "Success"
+                $objStatus.FirmwareDetails = "iLO5 firmware fully supported by COM. Firmware update will be skipped."
             }
         
         }
@@ -2089,8 +2113,8 @@ ForEach ($iLO in $iLOs) {
                 "{0}" -f $objStatus.iLOFirmwareVersion | Write-Host -ForegroundColor Yellow
                 "`t`t - Required: 1.64 or later" | Write-Host  
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO6 firmware version lower than v1.64 is not supported by COM activation key. Firmware update will be needed." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.FirmwareStatus = "Firmware update will be needed."
-                $objStatus.FirmwareDetails = "iLO6 firmware version lower than v1.64 is not supported by COM activation key."
+                $objStatus.FirmwareStatus = "Warning"
+                $objStatus.FirmwareDetails = "Firmware update will be needed. iLO6 firmware version lower than v1.64 is not supported by COM activation key."
             }                   
             else {
                 "OK" | Write-Host -f Green               
@@ -2098,8 +2122,8 @@ ForEach ($iLO in $iLOs) {
                 "{0}" -f $objStatus.iLOFirmwareVersion | Write-Host -ForegroundColor Green
                 "`t`t - Required: 1.64 or later" | Write-Host 
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - ServerSystemROM: {6}) - iLO6 FW fully supported by COM. Firmware update will be skipped." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.FirmwareStatus = "iLO6 firmware fully supported by COM."
-                $objStatus.FirmwareDetails = "Firmware update will be skipped."
+                $objStatus.FirmwareStatus = "Success"
+                $objStatus.FirmwareDetails = "iLO6 firmware fully supported by COM. Firmware update will be skipped."
 
             }
         
@@ -2111,8 +2135,8 @@ ForEach ($iLO in $iLOs) {
             "`t`t - Required: " | Write-Host -NoNewline
             "None. Update will be skipped as onboarding will use the 'workspace ID' method." | Write-Host -ForegroundColor Green
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - ServerSystemROM: {6}) - Firmware update will be skipped as onboarding type that will be used is 'workspace ID'." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-            $objStatus.FirmwareStatus = "iLO6 firmware fully supported by COM."
-            $objStatus.FirmwareDetails = "Firmware update will be skipped."
+            $objStatus.FirmwareStatus = "Success"
+            $objStatus.FirmwareDetails = "iLO6 firmware fully supported by COM. Firmware update will be skipped."
 
         }
     }
@@ -2188,7 +2212,7 @@ ForEach ($iLO in $iLOs) {
                             "Failed to retrieve iLO TPM status. StatusInfo: {0}" -f $TPMEnabled | Write-Host -ForegroundColor Red
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error retrieving iLO TPM status. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $TPMEnabled | Write-Verbose
                             $objStatus.FirmwareStatus = "Failed"
-                            $objStatus.FirmwareDetails = "Error retrieving iLO TPM status. Error: $iLOConnection"
+                            $objStatus.FirmwareDetails = "Error retrieving iLO TPM status. Error: $($iLOConnection)"
                             $objStatus.Status = "Failed"        
                             [void]$iLOPreparationStatus.Add($objStatus)
                             continue
@@ -2324,7 +2348,7 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "iLO firmware updated successfully and iLO is back online." | Write-Host -ForegroundColor Green
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO firmware updated successfully and iLO is back online." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.FirmwareStatus = "Complete"
+                        $objStatus.FirmwareStatus = "Success"
                         $objStatus.FirmwareDetails = "iLO firmware updated successfully"
 
                         $iLOConnection = $False
@@ -2360,7 +2384,7 @@ ForEach ($iLO in $iLOs) {
                                 "Error connecting to iLO after firmware update. Error: {0}" -f $iLOConnection | Write-Host -ForegroundColor Red
                                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting to iLO after firmware update. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLOConnection | Write-Verbose
                                 $objStatus.Status = "Failed"
-                                $objStatus.Details = "Error connecting to iLO after firmware update. Error: $iLOConnection"
+                                $objStatus.Details = "Error connecting to iLO after firmware update. Error: $($iLOConnection)"
                                 [void]$iLOPreparationStatus.Add($objStatus)
                                 continue
                             }
@@ -2380,8 +2404,8 @@ ForEach ($iLO in $iLOs) {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Error updating iLO firmware. Error: $_" | Write-Host -ForegroundColor Red
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error updating iLO firmware. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                    $objStatus.FirmwareStatus = "Error updating iLO firmware."
-                    $objStatus.FirmwareDetails = $_
+                    $objStatus.FirmwareStatus = "Failed"
+                    $objStatus.FirmwareDetails = "Error updating iLO firmware. Error: $($_)"
                     $objStatus.Status = "Failed"
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
@@ -2392,8 +2416,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "iLO5 firmware update is not needed as firmware is v3.09 or higher." | Write-Host -ForegroundColor Green
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO5 firmware update is not needed as firmware is v3.09 or higher." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.FirmwareStatus = "iLO firmware fully supported by COM."
-                $objStatus.FirmwareDetails = "Skipping firmware update."
+                $objStatus.FirmwareStatus = "Success"
+                $objStatus.FirmwareDetails = "iLO firmware fully supported by COM. Skipping firmware update."
 
             }
         }
@@ -2457,7 +2481,7 @@ ForEach ($iLO in $iLOs) {
                             "Failed to retrieve iLO TPM status. StatusInfo: {0}" -f $TPMEnabled | Write-Host -ForegroundColor Red
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error retrieving iLO TPM status. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $TPMEnabled | Write-Verbose
                             $objStatus.FirmwareStatus = "Failed"
-                            $objStatus.FirmwareDetails = "Error retrieving iLO TPM status. Error: $iLOConnection"
+                            $objStatus.FirmwareDetails = "Error retrieving iLO TPM status. Error: $($iLOConnection)"
                             $objStatus.Status = "Failed"        
                             [void]$iLOPreparationStatus.Add($objStatus)
                             continue
@@ -2594,7 +2618,7 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "iLO is back online and iLO firmware updated successfully." | Write-Host -ForegroundColor Green
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO firmware updated successfully and iLO is back online." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.FirmwareStatus = "Complete"
+                        $objStatus.FirmwareStatus = "Success"
                         $objStatus.FirmwareDetails = "iLO firmware updated successfully"
 
                         $iLOConnection = $False
@@ -2630,7 +2654,7 @@ ForEach ($iLO in $iLOs) {
                                 "Error connecting to iLO after firmware update. Error: {0}" -f $iLOConnection | Write-Host -ForegroundColor Red
                                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting to iLO after firmware update. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLOConnection | Write-Verbose
                                 $objStatus.Status = "Failed"
-                                $objStatus.Details = "Error connecting to iLO after firmware update. Error: $iLOConnection"
+                                $objStatus.Details = "Error connecting to iLO after firmware update. Error: $($iLOConnection)"
                                 [void]$iLOPreparationStatus.Add($objStatus)
                                 continue
                             }
@@ -2650,8 +2674,8 @@ ForEach ($iLO in $iLOs) {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Error updating iLO firmware. Error: $_" | Write-Host -ForegroundColor Red
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error updating iLO firmware. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                    $objStatus.FirmwareStatus = "Error updating iLO firmware."
-                    $objStatus.FirmwareDetails = $_
+                    $objStatus.FirmwareStatus = "Failed"
+                    $objStatus.FirmwareDetails = "Error updating iLO firmware. Error: $($_)"
                     $objStatus.Status = "Failed"
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
@@ -2662,8 +2686,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "iLO6 firmware update is not needed as firmware is v1.64 or higher." | Write-Host -ForegroundColor Green
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO6 firmware update is not needed as firmware is v1.64 or higher." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.FirmwareStatus = "iLO firmware fully supported by COM."
-                $objStatus.FirmwareDetails = "Skipping firmware update."
+                $objStatus.FirmwareStatus = "Success"
+                $objStatus.FirmwareDetails = "iLO firmware fully supported by COM. Skipping firmware update."
 
             }
         }
@@ -2672,8 +2696,8 @@ ForEach ($iLO in $iLOs) {
             "`t`t - Status: " | Write-Host -NoNewline
             "iLO6 firmware update is not needed as onboarding type is 'workspace ID'" | Write-Host -ForegroundColor Green
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO6 firmware update is not needed as onboarding type is 'workspace ID'" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-            $objStatus.FirmwareStatus = "iLO firmware fully supported by the onboarding type 'workspace ID'."
-            $objStatus.FirmwareDetails = "Skipping firmware update."
+            $objStatus.FirmwareStatus = "Success"
+            $objStatus.FirmwareDetails = "iLO firmware fully supported by the onboarding type 'workspace ID'. Skipping firmware update."
         }
     }
 
@@ -2693,27 +2717,24 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error checking iLO connection status. Message: {0}" -f $iLOCOMOnboardingStatus.StatusInfo.Message | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO connection to COM status. StatusInfo: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLOCOMOnboardingStatus.StatusInfo.Message | Write-Verbose
-                $objStatus.iLOConnectionStatus = "Error checking iLO connection status to Compute Ops Management."
-                $objStatus.iLOConnectionDetails = $iLOCOMOnboardingStatus.StatusInfo.Message
-                $objStatus.Status = "Failed"
+                $objStatus.iLOConnectionStatus = "Failed"
+                $objStatus.iLOConnectionDetails = "Error checking iLO connection status to Compute Ops Management. $($iLOCOMOnboardingStatus.StatusInfo.Message)"
             }
             elseif ($iLOCOMOnboardingStatus.CloudConnectStatus -eq "Connected") {
                 "Connected" | Write-Host -f Green
                 "`t`t - Status: " | Write-Host -NoNewline
                 "iLO already connected to COM." | Write-Host -ForegroundColor Green
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO already connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.iLOConnectionStatus = $iLOCOMOnboardingStatus.CloudConnectStatus
+                $objStatus.iLOConnectionStatus = "Success"
                 $objStatus.iLOConnectionDetails = "iLO already connected to COM."
-                $objStatus.Status = "Success"
             }
             else {
                 "Disconnected" | Write-Host -f Yellow
                 "`t`t - Status: " | Write-Host -NoNewline
                 "iLO not connected to COM. Current status: {0}" -f $iLOCOMOnboardingStatus.CloudConnectStatus | Write-Host -ForegroundColor Yellow
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO not connected to COM. Status: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLOCOMOnboardingStatus.CloudConnectStatus | Write-Verbose
-                $objStatus.iLOConnectionStatus = $iLOCOMOnboardingStatus.CloudConnectStatus
-                $objStatus.iLOConnectionDetails = "iLO not connected to COM."
-                $objStatus.Status = "Warning"
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO not connected to COM. Status: '{7}'" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $iLOCOMOnboardingStatus.CloudConnectStatus | Write-Verbose
+                $objStatus.iLOConnectionStatus = "Warning"
+                $objStatus.iLOConnectionDetails = "iLO not connected to COM. Current status: $($iLOCOMOnboardingStatus.CloudConnectStatus)"
             }
         }
         catch {
@@ -2721,9 +2742,8 @@ ForEach ($iLO in $iLOs) {
             "`t`t - Status: " | Write-Host -NoNewline
             "Failed to retrieve iLO connection status. Error: $_" | Write-Host -ForegroundColor Red
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve iLO connection to COM status. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-            $objStatus.iLOConnectionStatus = "Failed to retrieve iLO connection to COM status."
-            $objStatus.iLOConnectionDetails = "$($_)"
-            $objStatus.Status = "Failed"
+            $objStatus.iLOConnectionStatus = "Failed"
+            $objStatus.iLOConnectionDetails = "Failed to retrieve iLO connection to COM status. $($_)"
         }
     }
 
@@ -2775,7 +2795,7 @@ ForEach ($iLO in $iLOs) {
                 "iLO did not reach a ready state for COM connection after $maxRetries retries ($timeoutMinutes minutes). Last status: $iLOComputeOpsManagementStatus" | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO did not reach a ready state for COM connection after {7} retries ({8} minutes). Last status: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $maxRetries, $timeoutMinutes, $iLOComputeOpsManagementStatus | Write-Verbose
                 $objStatus.iLOConnectionStatus = "Failed"
-                $objStatus.iLOConnectionDetails = "iLO did not reach a ready state for COM connection after $maxRetries retries ($timeoutMinutes minutes). Last status: $iLOComputeOpsManagementStatus"
+                $objStatus.iLOConnectionDetails = "iLO did not reach a ready state for COM connection after $maxRetries retries ($($timeoutMinutes) minutes). Last status: $($iLOComputeOpsManagementStatus)"
                 $objStatus.Status = "Failed"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
@@ -2864,8 +2884,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error generating COM activation key. Please check your configuration and try again." | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error generating COM activation key. Please check your configuration and try again. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.Details = "Error generating COM activation key. Error: $($_)"
                 $objStatus.Status = "Failed"
+                $objStatus.Details = "Error generating COM activation key. Error: $($_)"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
             }
@@ -2910,8 +2930,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error connecting iLO to COM. Error: $_" | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.iLOConnectionStatus = "Error connecting iLO to COM."
-                $objStatus.iLOConnectionDetails = $_
+                $objStatus.iLOConnectionStatus = "Failed"
+                $objStatus.iLOConnectionDetails = "Error connecting iLO to COM. Error: $($_)"
                 $objStatus.Status = "Failed"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
@@ -2928,8 +2948,9 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error adding compute to workspace. Error: $_" | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to workspace - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                $objStatus.AddComputeToWorkspaceStatus = "Failed"
+                $objStatus.AddComputeToWorkspaceDetails = "Error adding compute to workspace. Error: $($_)"
                 $objStatus.Status = "Failed"
-                $objStatus.Details = "Error adding compute to workspace. Error: $($_)"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
             }
@@ -2938,8 +2959,9 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Compute not added to workspace successfully. Error: {0}" -f $AddComputeToWorkspace.details | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute not added to workspace successfully. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $AddComputeToWorkspace.details | Write-Verbose
+                $objStatus.AddComputeToWorkspaceStatus = "Failed"
+                $objStatus.AddComputeToWorkspaceDetails = "Compute not added to workspace successfully. Error: {0}" -f $AddComputeToWorkspace.details
                 $objStatus.Status = "Failed"
-                $objStatus.Details = "Compute not added to workspace successfully. Error: {0}" -f $AddComputeToWorkspace.details
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
             }
@@ -2947,8 +2969,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Compute added to workspace successfully." | Write-Host -ForegroundColor Green
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute added to workspace successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.Status = "Success"
-                $objStatus.Details = "Compute added to workspace successfully."                
+                $objStatus.AddComputeToWorkspaceStatus = "Success"
+                $objStatus.AddComputeToWorkspaceDetails = "Compute added to workspace successfully."
             }
 
             # Add the compute device to the COM service
@@ -2960,8 +2982,9 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error adding compute to Compute Ops Management service. Error: $_" | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to Compute Ops Management service - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                $objStatus.AddComputeToCOMInstanceStatus = "Failed"
+                $objStatus.AddComputeToCOMInstanceDetails = "Error adding compute to Compute Ops Management service. Error: $($_)"
                 $objStatus.Status = "Failed"
-                $objStatus.Details = "Error adding compute to Compute Ops Management service. Error: $($_)"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
             }
@@ -2970,8 +2993,9 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Compute not added to Compute Ops Management service successfully. Error: {0}" -f $AddComputeToCOMInstance.details | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute not added to Compute Ops Management service successfully. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $AddComputeToCOMInstance.details | Write-Verbose
+                $objStatus.AddComputeToCOMInstanceStatus = "Failed"
+                $objStatus.AddComputeToCOMInstanceDetails = "Compute not added to Compute Ops Management service successfully. Error: {0}" -f $AddComputeToCOMInstance.details
                 $objStatus.Status = "Failed"
-                $objStatus.Details = "Compute not added to Compute Ops Management service successfully. Error: {0}" -f $AddComputeToCOMInstance.details
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
             }
@@ -2979,8 +3003,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Compute added to Compute Ops Management service successfully." | Write-Host -ForegroundColor Green
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute added to Compute Ops Management service successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.Status = "Success"
-                $objStatus.Details = "Compute added to Compute Ops Management service successfully."
+                $objStatus.AddComputeToCOMInstanceStatus = "Success"
+                $objStatus.AddComputeToCOMInstanceDetails = "Compute added to Compute Ops Management service successfully."
             }
 
             # Add COM service subscription to the compute device
@@ -2994,8 +3018,9 @@ ForEach ($iLO in $iLOs) {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Error retrieving a valid subscription key for the server. Please check your configuration and try again." | Write-Host -ForegroundColor Red 
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error retrieving a valid subscription key for the server. Please check your configuration and try again." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                    $objStatus.AddCOMSubscriptionStatus = "Failed"
+                    $objStatus.AddCOMSubscriptionDetails = "Error retrieving a valid subscription key for the server. Please check your configuration and try again."
                     $objStatus.Status = "Failed"
-                    $objStatus.Details = "Error retrieving a valid subscription key for the server. Please check your configuration and try again."
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
                 }
@@ -3006,8 +3031,9 @@ ForEach ($iLO in $iLOs) {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Error adding Compute Ops Management service subscription to compute. Error: $_" | Write-Host -ForegroundColor Red
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to Compute Ops Management service subscription - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                    $objStatus.AddCOMSubscriptionStatus = "Failed"
+                    $objStatus.AddCOMSubscriptionDetails = "Error adding compute to Compute Ops Management service subscription. Error: $($_)"
                     $objStatus.Status = "Failed"
-                    $objStatus.Details = "Error adding compute to Compute Ops Management service subscription. Error: $($_)"
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
                 }
@@ -3015,16 +3041,17 @@ ForEach ($iLO in $iLOs) {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Compute Ops Management service subscription added to compute successfully." | Write-Host -ForegroundColor Green
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute Ops Management service subscription added to compute successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                    $objStatus.Status = "Success"
-                    $objStatus.Details = "Compute Ops Management service subscription added to compute successfully."
+                    $objStatus.AddCOMSubscriptionStatus = "Success"
+                    $objStatus.AddCOMSubscriptionDetails = "Compute Ops Management service subscription added to compute successfully."
                 }
             }
             catch {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error adding Compute Ops Management service subscription to compute. Error: $_" | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to Compute Ops Management service subscription - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                $objStatus.AddCOMSubscriptionStatus = "Failed"
+                $objStatus.AddCOMSubscriptionDetails = "Error adding compute to Compute Ops Management service subscription. Error: $($_)"
                 $objStatus.Status = "Failed"
-                $objStatus.Details = "Error adding compute to Compute Ops Management service subscription. Error: $($_)"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
             }
@@ -3061,8 +3088,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error connecting iLO to COM. Error: $_" | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.iLOConnectionStatus = "Error connecting iLO to COM."
-                $objStatus.iLOConnectionDetails = $_
+                $objStatus.iLOConnectionStatus = "Failed"
+                $objStatus.iLOConnectionDetails = "Error connecting iLO to COM. Error: $($_)"
                 $objStatus.Status = "Failed"
                 [void]$iLOPreparationStatus.Add($objStatus)
                 continue
@@ -3076,6 +3103,10 @@ ForEach ($iLO in $iLOs) {
             "`t`t - Status: " | Write-Host -NoNewline
             "Error connecting iLO to COM. Status: {0} - Details: {1}" -f $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Host -ForegroundColor Red
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Status: {7} - Details: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Verbose
+            $objStatus.iLOConnectionStatus = $OnboardingStatus.Status
+            $objStatus.iLOConnectionDetails = $OnboardingStatus.iLOConnectionDetails
+            $objStatus.Status = $OnboardingStatus.Status
+            $objStatus.Details = $OnboardingStatus.Details
             [void]$iLOPreparationStatus.Add($objStatus)
             continue
         }
@@ -3084,19 +3115,19 @@ ForEach ($iLO in $iLOs) {
             "`t`t - Status: " | Write-Host -NoNewline
             "iLO is already connected to COM." | Write-Host -ForegroundColor Green
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO is already connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+            $objStatus.iLOConnectionStatus = "Success"
+            $objStatus.iLOConnectionDetails = "iLO is already connected to the Compute Ops Management instance."
         }
         else {
             # Handle successful new connection
             "`t`t - Status: " | Write-Host -NoNewline
             "iLO successfully connected to COM." | Write-Host -ForegroundColor Green
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO successfully connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+            $objStatus.iLOConnectionStatus = "Success"
+            $objStatus.iLOConnectionDetails = "iLO successfully connected to the Compute Ops Management instance."
         }
 
-        # Update status properties for all scenarios
-        $objStatus.Status = $OnboardingStatus.Status
-        $objStatus.Details = $OnboardingStatus.Details
-        $objStatus.iLOConnectionStatus = if ($OnboardingStatus.iLOConnectionStatus) { $OnboardingStatus.iLOConnectionStatus } else { $OnboardingStatus.Status }
-        $objStatus.iLOConnectionDetails = if ($OnboardingStatus.iLOConnectionDetails) { $OnboardingStatus.iLOConnectionDetails } else { $OnboardingStatus.Details }
+
         
         #EndRegion
 
@@ -3250,7 +3281,8 @@ ForEach ($iLO in $iLOs) {
                                 Write-Host $FormattedMissingTags -f Yellow
                                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Missing: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedMissingTags | Write-Verbose
                                 $objStatus.TagsAssignmentStatus = "Warning"
-                                $objStatus.TagsAssignmentDetails = "Missing tags: $FormattedMissingTags"
+                                $objStatus.TagsAssignmentDetails = "Missing tags: $($FormattedMissingTags)"
+
                             }
                             elseif ($ExtraTagsList.Count -gt 0 -and $MissingTagsList.Count -eq 0) {
                                 "Warning" | Write-Host -f Yellow               
@@ -3259,7 +3291,7 @@ ForEach ($iLO in $iLOs) {
                                 Write-Host $FormattedExtraTags -f Yellow
                                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Extra: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTags | Write-Verbose
                                 $objStatus.TagsAssignmentStatus = "Warning"
-                                $objStatus.TagsAssignmentDetails = "Extra tags: $FormattedExtraTags"
+                                $objStatus.TagsAssignmentDetails = "Extra tags: $($FormattedExtraTags)"
                             }
                             elseif ($MissingTagsList.Count -gt 0 -and $ExtraTagsList.Count -gt 0) {
                                 "Warning" | Write-Host -f Yellow               
@@ -3270,7 +3302,7 @@ ForEach ($iLO in $iLOs) {
                                 Write-Host $FormattedMissingTags -f Yellow
                                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Missing: {7} - Extra: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedMissingTags, $FormattedExtraTags | Write-Verbose
                                 $objStatus.TagsAssignmentStatus = "Warning"
-                                $objStatus.TagsAssignmentDetails = "Missing tags: $FormattedMissingTags - Extra tags: $FormattedExtraTags"
+                                $objStatus.TagsAssignmentDetails = "Missing tags: $($FormattedMissingTags) - Extra tags: $($FormattedExtraTags)"
                             }
                         }
                         else {
@@ -3281,7 +3313,7 @@ ForEach ($iLO in $iLOs) {
                             "`t`t - Extra: " | Write-Host -NoNewline
                             "None" | Write-Host -ForegroundColor Green
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags configuration is not required as tags are already defined!" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                            $objStatus.TagsAssignmentStatus = "Complete"
+                            $objStatus.TagsAssignmentStatus = "Success"
                             $objStatus.TagsAssignmentDetails = "Tags configuration is not required as tags are already defined!"
                         }
                 
@@ -3303,10 +3335,9 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error retrieving device details in the workspace. Error: $_" | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve device details in the workspace. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.TagsAssignmentStatus = "Error retrieving device details."
-                $objStatus.TagsAssignmentDetails = $_
-                $objStatus.Status = "Failed"
-
+                $objStatus.TagsAssignmentStatus = "Failed"
+                $objStatus.TagsAssignmentDetails = "Error retrieving device details. Error: $($_)"
+  
             }
         }
     }
@@ -3370,7 +3401,6 @@ ForEach ($iLO in $iLOs) {
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $ExistingtagsList, $DeviceTagsRemovalStatus.Status, $DeviceTagsRemovalStatus.Details | Write-Verbose
                             $objStatus.TagsAssignmentStatus = "Failed"
                             $objStatus.TagsAssignmentDetails = "Error removing tags. Status: $($DeviceTagsRemovalStatus.Status) - Details: $($DeviceTagsRemovalStatus.Details)"
-                            $objStatus.Status = "Failed"                 
                         }
                     }
                     catch {
@@ -3378,9 +3408,8 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Error removing tags. Error: $_" | Write-Host -ForegroundColor Red
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $ExistingtagsList, $_ | Write-Verbose
-                        $objStatus.TagsAssignmentStatus = "Error removing tags from device."
-                        $objStatus.TagsAssignmentDetails = $_
-                        $objStatus.Status = "Failed"
+                        $objStatus.TagsAssignmentStatus = "Failed"
+                        $objStatus.TagsAssignmentDetails = "Error removing tags from device. Error: $($_)"
                     }                    
                 }
                 else {
@@ -3394,25 +3423,23 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Tags '{0}' added successfully." -f $Tags | Write-Host -ForegroundColor Green
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags '{7}' added successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags | Write-Verbose
-                        $objStatus.TagsAssignmentStatus = $TagsAssignmentStatus.Status
+                        $objStatus.TagsAssignmentStatus = "Success"
                         $objStatus.TagsAssignmentDetails = $TagsAssignmentStatus.Details
                     }
                     else {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Error adding tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Host -ForegroundColor Red
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Verbose
-                        $objStatus.TagsAssignmentStatus = $TagsAssignmentStatus.Status
-                        $objStatus.TagsAssignmentDetails = $TagsAssignmentStatus.Details
-                        $objStatus.Status = "Failed"
+                        $objStatus.TagsAssignmentStatus = "Failed"
+                        $objStatus.TagsAssignmentDetails = "Error adding tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details
                     }
                 }
                 catch {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Error adding tags. Error: $_" | Write-Host -ForegroundColor Red
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $_ | Write-Verbose
-                    $objStatus.TagsAssignmentStatus = "Error adding tags to device."
-                    $objStatus.TagsAssignmentDetails = $_
-                    $objStatus.Status = "Failed"
+                    $objStatus.TagsAssignmentStatus = "Failed"
+                    $objStatus.TagsAssignmentDetails = "Error adding tags to device. Error: $($_)"
                 }
             }
         }
@@ -3421,9 +3448,8 @@ ForEach ($iLO in $iLOs) {
             "`t`t - Status: " | Write-Host -NoNewline
             "Error retrieving device details in the workspace. Error: $_" | Write-Host -ForegroundColor Red
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve device details in the workspace. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-            $objStatus.TagsAssignmentStatus = "Error retrieving device details."
-            $objStatus.TagsAssignmentDetails = $_
-            $objStatus.Status = "Failed"         
+            $objStatus.TagsAssignmentStatus = "Failed"
+            $objStatus.TagsAssignmentDetails = "Error retrieving device details. Error: $($_)"
         }
 
     }
@@ -3478,8 +3504,8 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Required: " | Write-Host -NoNewline
                         "{0}" -f $LocationName | Write-Host 
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location configuration is not required as the location is already configured." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = "Complete"
-                        $objStatus.LocationAssignmentDetails = "Location configuration is not required as the location is already configured."                        
+                        $objStatus.LocationAssignmentStatus = "Success"
+                        $objStatus.LocationAssignmentDetails = "Location configuration is not required as the location is already configured."
                     }
                     else {
                         "Warning" | Write-Host -f Yellow               
@@ -3498,9 +3524,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Error retrieving device details in the workspace. Error: $_" | Write-Host -ForegroundColor Red
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve device details in the workspace. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.LocationAssignmentStatus = "Error retrieving device details."
-                $objStatus.LocationAssignmentDetails = $_
-                $objStatus.Status = "Failed"
+                $objStatus.LocationAssignmentStatus = "Failed"
+                $objStatus.LocationAssignmentDetails = "Error retrieving device details. Error $($_)"
             }          
         }                 
     }
@@ -3547,8 +3572,8 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Error removing device from location. Error: $_" | Write-Host -ForegroundColor Red
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to remove device from location. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = "Failed to remove device from location."
-                        $objStatus.LocationAssignmentDetails = $_
+                        $objStatus.LocationAssignmentStatus = "Failed"
+                        $objStatus.LocationAssignmentDetails = "Failed to remove device from location. Error: $($_)"
                         $objStatus.Status = "Failed"
                         [void]$iLOPreparationStatus.Add($objStatus)
                         continue
@@ -3570,8 +3595,8 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Error assigning location. Status: {0} - Details: {1}" -f $LocationAssignmentStatus.Status, $LocationAssignmentStatus.Details | Write-Host -ForegroundColor Red
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error assigning location '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName, $LocationAssignmentStatus.Status, $LocationAssignmentStatus.Details | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = $LocationAssignmentStatus.Status
-                        $objStatus.LocationAssignmentDetails = $LocationAssignmentStatus.Details
+                        $objStatus.LocationAssignmentStatus = "Failed"
+                        $objStatus.LocationAssignmentDetails = "Failed to assign location. Error: $($_)"
                         $objStatus.Status = "Failed"
                         [void]$iLOPreparationStatus.Add($objStatus)
                         continue
@@ -3580,7 +3605,7 @@ ForEach ($iLO in $iLOs) {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "Location assigned successfully." | Write-Host -ForegroundColor Green
                         "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location '{7}' successfully assigned." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = $LocationAssignmentStatus.Status
+                        $objStatus.LocationAssignmentStatus = "Success"
                         $objStatus.LocationAssignmentDetails = $LocationAssignmentStatus.Details
                     }                    
                 }
@@ -3588,8 +3613,8 @@ ForEach ($iLO in $iLOs) {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Error assigning location. Error: $_" | Write-Host -ForegroundColor Red
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error assigning location '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName, $_ | Write-Verbose
-                    $objStatus.LocationAssignmentStatus = "Error assigning device to location."
-                    $objStatus.LocationAssignmentDetails = $_
+                    $objStatus.LocationAssignmentStatus = "Failed"
+                    $objStatus.LocationAssignmentDetails = "Failed to assign location. Error: $($_)"
                     $objStatus.Status = "Failed"
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
@@ -3602,8 +3627,8 @@ ForEach ($iLO in $iLOs) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Location already defined." | Write-Host -ForegroundColor Green
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location '{7}' already defined. Skipping location assignment..." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DeviceLocation | Write-Verbose
-                $objStatus.LocationAssignmentStatus = "Location already defined."
-                $objStatus.LocationAssignmentDetails = $DeviceLocation          
+                $objStatus.LocationAssignmentStatus = "Success"
+                $objStatus.LocationAssignmentDetails = "Location already defined. Skipping location assignment..."
             }       
         }
         catch {
@@ -3611,14 +3636,47 @@ ForEach ($iLO in $iLOs) {
             "`t`t - Status: " | Write-Host -NoNewline
             "Error retrieving device details in the workspace. Error: $_" | Write-Host -ForegroundColor Red
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve device details in the workspace. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-            $objStatus.LocationAssignmentStatus = "Failed to retrieve device location details."
-            $objStatus.LocationAssignmentDetails = $_
-            $objStatus.Status = "Failed"    
+            $objStatus.LocationAssignmentStatus = "Failed"
+            $objStatus.LocationAssignmentDetails = "Failed to retrieve device details. Error: $($_)"
+            $objStatus.Status = "Failed"
             [void]$iLOPreparationStatus.Add($objStatus)
             continue      
         }
     }
 
+    #Region Final Status Assessment
+    # Check if the overall Status is not already set to 'Failed' or to 'Skipped' before performing the assessment
+    if ($objStatus.Status -ne "Failed" -and $objStatus.Status -ne "Skipped") {
+        # Get all properties that end with 'Status' but exclude the main 'Status' property itself
+        $statusProperties = $objStatus.PSObject.Properties | Where-Object { $_.Name -like "*Status" -and $_.Name -ne "Status" }
+        
+        # Check for any 'Failed' status
+        $hasFailedStatus = $statusProperties | Where-Object { $_.Value -eq "Failed" }
+        
+        # Check for any 'Warning' status
+        $hasWarningStatus = $statusProperties | Where-Object { $_.Value -eq "Warning" }
+        
+        if ($hasFailedStatus) {
+            # If any status property is 'Failed', set overall status to 'Failed'
+            $objStatus.Status = "Failed"
+            $objStatus.Details = "One or more operations failed during processing"
+        }
+        elseif ($hasWarningStatus) {
+            # If no failures but warnings exist, set overall status to 'Warning'
+            $objStatus.Status = "Warning"
+            $objStatus.Details = "One or more operations completed with warnings"
+        }
+        else {
+            # Check if we have any 'Success' status properties
+            $hasSuccessStatus = $statusProperties | Where-Object { $_.Value -eq "Success" }
+            if ($hasSuccessStatus) {
+                # If only successful operations, set overall status to 'Success'
+                $objStatus.Status = "Success"
+                $objStatus.Details = "All operations completed successfully"
+            }
+        }
+    }
+    #EndRegion
 
     # Add the status of the operation to the array
     [void]$iLOPreparationStatus.Add($objStatus)
@@ -3678,48 +3736,50 @@ function Export-StatusReport {
 }
 
 # Handle output based on operation mode
+
+# Calculate counts 
+$successCount = ($iLOPreparationStatus | Where-Object { $_.Status -eq "Success" }).Count
+$failureCount = ($iLOPreparationStatus | Where-Object { $_.Status -eq "Failed" }).Count
+$WarningCount = ($iLOPreparationStatus | Where-Object { $_.Status -eq "Warning" }).Count
+$skippedCount = ($iLOPreparationStatus | Where-Object { $_.Status -eq "Skipped" }).Count
+$totalCount = ($iLOPreparationStatus | Measure-Object).Count
+
+
 if (-not $Check) {
-    # Onboarding mode - show results and export
-    $failedDevices = $iLOPreparationStatus | Where-Object { $_.Status -eq "Failed" }
-    
-    if ($failedDevices) {
-        $failureCount = ($failedDevices | Measure-Object).Count
-        $totalCount = ($iLOPreparationStatus | Measure-Object).Count
-        Write-Host "`n⚠️  Onboarding completed with issues: $failureCount of $totalCount devices failed." -ForegroundColor Yellow
+    $reportFile = $OnboardingReportFile
+    Write-Host "`nOnboarding summary: $successCount succeeded, $failureCount failed, $WarningCount warnings, $skippedCount skipped (Total: $totalCount)" -ForegroundColor Cyan
+
+    if ($successCount -eq $totalCount) {
+        Write-Host "✅ Onboarding completed successfully for all servers!" -ForegroundColor Green
+        Write-Host "   All servers have been configured and connected to Compute Ops Management in the '$region' region." -ForegroundColor Cyan
+    }
+    else {                
+        Write-Host "⚠️  Onboarding completed with issues!" -ForegroundColor Yellow
         Write-Host "   Please review the detailed status report and resolve any issues before retrying." -ForegroundColor Yellow
     }
-    else {
-        $successCount = ($iLOPreparationStatus | Measure-Object).Count
-        Write-Host "`n✅ Onboarding completed successfully!" -ForegroundColor Green
-        Write-Host "   All $successCount servers have been configured and connected to Compute Ops Management in the '$region' region." -ForegroundColor Cyan
-    }
-    
-    # Export onboarding status
-    Export-StatusReport -FilePath $OnboardingReportFile -StatusData $iLOPreparationStatus
-    Write-Host "`n📄 Onboarding status report exported to: $OnboardingReportFile" -ForegroundColor Cyan
 }
 else {
-    # Check mode - show results and export
-    $failedChecks = $iLOPreparationStatus | Where-Object { $_.Status -eq "Failed" -or $_.Status -eq "Error" }
-    $totalChecked = ($iLOPreparationStatus | Measure-Object).Count
+    $reportFile = $CheckReportFile
+    Write-Host "`nCheck summary: $successCount succeeded, $failureCount failed, $WarningCount warnings, $skippedCount skipped (Total: $totalCount)" -ForegroundColor Cyan
     
-    if ($failedChecks) {
-        $failureCount = ($failedChecks | Measure-Object).Count
-        Write-Host "`n⚠️  Status check completed: $failureCount of $totalChecked devices have issues." -ForegroundColor Yellow
+    if ($successCount -eq $totalCount) {
+        Write-Host "✅ Status check completed successfully for all servers!" -ForegroundColor Green
+        Write-Host "   All servers are properly configured and connected to Compute Ops Management." -ForegroundColor Cyan
     }
     else {
-        Write-Host "`n✅ Status check completed successfully!" -ForegroundColor Green
-        Write-Host "   All $totalChecked devices are properly configured and connected." -ForegroundColor Cyan
+        Write-Host "⚠️  Status check completed with issues!" -ForegroundColor Yellow
+        Write-Host "   Please review the detailed status report and resolve any issues before proceeding to onboarding." -ForegroundColor Yellow
     }
     
-    # Export check status
-    Export-StatusReport -FilePath $CheckReportFile -StatusData $iLOPreparationStatus
-    Write-Host "`n📄 Status check report exported to: $CheckReportFile" -ForegroundColor Cyan
 }
+
+# Export status report 
+Export-StatusReport -FilePath $reportFile -StatusData $iLOPreparationStatus
+Write-Host "`n📄 Status report exported to: $reportFile" -ForegroundColor Cyan
 
 #EndRegion
     
-# Disconnect-OVMgmt
+Disconnect-OVMgmt
 Read-Host -Prompt "Hit return to close" 
 
 
