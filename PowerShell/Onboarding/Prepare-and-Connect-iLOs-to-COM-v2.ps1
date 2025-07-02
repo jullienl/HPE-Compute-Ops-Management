@@ -3779,7 +3779,7 @@ Write-Host "`n📄 Status report exported to: $reportFile" -ForegroundColor Cyan
 
 #EndRegion
     
-Disconnect-OVMgmt
+Disconnect-HPEGL
 Read-Host -Prompt "Hit return to close" 
 
 
