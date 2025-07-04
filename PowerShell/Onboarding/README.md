@@ -64,6 +64,7 @@ The script can be run with the following parameters:
 
 The script includes a comprehensive "What's New" section in the header that documents all recent updates and improvements. Key highlights include:
 
+- **July 2, 2025**: Added many improvements to the entire script. Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script. Improved on-screen reporting for "Unsupported/Skipped" servers.
 - **July 1, 2025**: General improvements, bug fixes, and enhanced compatibility for A55/A56 server hardware platforms (Gen11)
 - **June 10, 2025**: Fixed COM activation key assignment and subscription validation issues
 - **June 4, 2025**: Improved session reliability, enhanced documentation, and security enhancements
