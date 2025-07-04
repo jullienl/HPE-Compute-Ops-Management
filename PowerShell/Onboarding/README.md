@@ -26,8 +26,7 @@ IP
 
 **Note:** The first line is the header and must be "IP".
 
-
-To see a demonstration of this script in action, watch the following video: 
+To see a demonstration of this script in action, watch the video — please note that it was created during the initial phase of development, and many aspects have been improved since then:
 
 [![Preparing and connecting HPE Servers to Compute Ops Management with PowerShell](https://img.youtube.com/vi/ZV0bmqmODmU/0.jpg)](https://youtu.be/ZV0bmqmODmU)
 
