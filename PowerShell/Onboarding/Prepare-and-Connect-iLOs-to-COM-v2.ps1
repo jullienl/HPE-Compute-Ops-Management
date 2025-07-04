@@ -147,15 +147,34 @@ Note:
 
 Example 1: Pre-checking before onboarding
 
-```powershell
 .\Prepare-and-Connect-iLOs-to-COM-v2.ps1 -Check
-```
 
 Output:
-```
 
     Enter password for iLO account 'administrator': ********
+
+    Verifying the authenticity and integrity of the HPEiLOCmdlets module...
+    Verifying file: HPEiLOCmdlets.resources.dll
+    Verifying file: HPEiLOCmdlets.resources.dll
+    Verifying file: AutoMapper.dll
+    Verifying file: DeepCloner.dll
+    Verifying file: HPEiLOCmdlets.dll
+    Verifying file: HPEiLOCmdlets.psd1
+    Verifying file: log4net.dll (third-party library)
+    Verifying file: Newtonsoft.Json.dll
+    Verifying file: System.Reflection.TypeExtensions.dll
+    HPEiLOCmdlets module verification successful. All signatures, certificates, and metadata are valid.
+    Proceeding to import module...
+
+    Verifying the authenticity and integrity of the HPECOMCmdlets module...
+    Verifying file: HPECOMCmdlets.Format.ps1xml
+    Verifying file: HPECOMCmdlets.psd1
+    Verifying file: HPECOMCmdlets.psm1
+    HPECOMCmdlets module verification successful. All signatures, certificates, and metadata are valid.
+    Proceeding to import module...
+
     Enter password for your HPE GreenLake account 'email@domain.com': ********
+
     [Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
 
     ------------------------------
@@ -172,6 +191,7 @@ Output:
     ------------------------------
 
     - [192.168.0.20] (v3.08 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004G)
+            - Onboarding method selected: Activation Key
             - DNS: Warning
                     - Current: None
                     - Missing: 192.168.2.1, 192.168.2.3
@@ -182,14 +202,17 @@ Output:
                     - Current: 3.08
                     - Required: 3.09 or later
             - iLO connection to COM: Disconnected
+                - Status: iLO not connected to COM. Current status: NotEnabled  
             - Tags: Warning
                     - Current: None                                                                                        
                     - Missing: Country=FR, App=AI, Department=IT
+                    - Extra: None
             - Location: Warning
                     - Current: None                                                                                        
                     - Required: Nice
 
     - [192.168.0.21] (v3.1 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004H)
+            - Onboarding method selected: Activation Key
             - DNS: Ok
                     - Current: 192.168.2.1, 192.168.2.3
                     - Missing: None
@@ -199,15 +222,18 @@ Output:
             - iLO firmware: OK
                     - Current: 3.1
                     - Required: 3.09 or later
-            - iLO connection to COM: Disconnected
+            - iLO connection to COM: Connected
+                    - Status: iLO already connected to COM.
             - Tags: Warning
                     - Current: None                                                                                        
                     - Missing: Country=FR, App=AI, Department=IT
+                    - Extra: None
             - Location: Warning
                     - Current: None                                                                                        
                     - Required: Nice
 
     - [192.168.1.56] (v1.62 iLO6 - Model:DL365 Gen11 - SN:CZJ3100GD9)
+            - Onboarding method selected: Activation Key
             - DNS: Ok
                     - Current: 192.168.2.1, 192.168.2.3
                     - Missing: None
@@ -219,35 +245,63 @@ Output:
                     - Required: 1.64 or later
             - iLO connection to COM: Disconnected
             - Tags: Warning
-                    - Current: None                                                                                        
-                    - Missing: Country=FR, App=AI, Department=IT
+                    - Current: Country=FR                                                                                        
+                    - Missing: Department=IT, App=AI
+                    - Extra: None
             - Location: Warning
                     - Current: None                                                                                        
                     - Required: Nice
 
-    The status of the check has been exported to 'Z:\Onboarding\iLO_Check_Status_20250227_1011.csv'
+    
+    Check summary: 0 succeeded, 0 failed, 3 warnings, 0 skipped (Total: 3)
+
+    ⚠️ Status check completed with issues!
+        Please review the detailed status report and resolve any issues before proceeding to onboarding.
+    
+    📄 Status report exported to: Z:\Onboarding\iLO_Check_Status_20250227_1011.csv
+
+    email@domain.com session disconnected!
     Hit return to close:
 
-```
 
 .EXAMPLE
 
 Example 2: Onboarding
 
-```powershell
 .\Prepare-and-Connect-iLOs-to-COM-v2.ps1  
-```
 
 Output:
-```
+
     Enter password for iLO account 'administrator': ********
+
+    Verifying the authenticity and integrity of the HPEiLOCmdlets module...
+    Verifying file: HPEiLOCmdlets.resources.dll
+    Verifying file: HPEiLOCmdlets.resources.dll
+    Verifying file: AutoMapper.dll
+    Verifying file: DeepCloner.dll
+    Verifying file: HPEiLOCmdlets.dll
+    Verifying file: HPEiLOCmdlets.psd1
+    Verifying file: log4net.dll (third-party library)
+    Verifying file: Newtonsoft.Json.dll
+    Verifying file: System.Reflection.TypeExtensions.dll
+    HPEiLOCmdlets module verification successful. All signatures, certificates, and metadata are valid.
+    Proceeding to import module...
+
+    Verifying the authenticity and integrity of the HPECOMCmdlets module...
+    Verifying file: HPECOMCmdlets.Format.ps1xml
+    Verifying file: HPECOMCmdlets.psd1
+    Verifying file: HPECOMCmdlets.psm1
+    HPECOMCmdlets module verification successful. All signatures, certificates, and metadata are valid.
+    Proceeding to import module...
+
     Enter password for your HPE GreenLake account 'email@domain.com': ********
+
     [Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
     [Workspace: HPE Mougins] - COM instance 'eu-central' successfully found.
     [Workspace: HPE Mougins] - Sufficient licenses available (19) for the number of iLOs (3).                               
-    [Workspace: HPE Mougins] - Successfully generated COM activation key '3CJ7S2DH8' for region 'eu-central'.
 
     - [192.168.0.20] (v3.08 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004G)
+            - Onboarding method selected: Activation Key
             - DNS: InProgress
                     - Status: DNS settings set successfully!
             - SNTP: InProgress
@@ -264,53 +318,36 @@ Output:
                     - Status: Reconnecting to iLO...
                     - Status: Waiting for iLO to be ready for COM connection...
                     - Status: iLO is ready for COM connection.
+            - COM activation key: InProgress
+                 - Status: Successfully generated COM standard activation key 'VCC7G2A64' for region 'eu-central'.    
             - iLO connection to COM: InProgress
                     - Status: iLO successfully connected to COM.
             - Tags: InProgress                                                                                             
                     - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
             - Location: InProgress
+                    - Status: No current location assigned. Proceeding to assign new location.
                     - Status: Location assigned successfully.
 
     - [192.168.0.21] (v3.1 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004H)
+            - Onboarding method selected: Activation Key
             - DNS: Skipped
                     - Status: DNS configuration is not required as the DNS servers are already defined.
             - SNTP: Skipped
                     - Status: SNTP configuration is not required as the SNTP servers are already defined.
             - iLO firmware: Skipped
                     - Status: iLO5 firmware update is not needed as firmware is v3.09 or higher.
+            - COM activation key: InProgress
+                 - Status: Successfully generated COM standard activation key 'VCC7G2A64' for region 'eu-central'. 
             - iLO connection to COM: InProgress
                     - Status: iLO successfully connected to COM.
-            - Tags: InProgress
             - Tags: InProgress
                     - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
             - Location: InProgress
-                    - Status: Location assigned successfully.
-
-    - [192.168.0.21] (v3.1 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004H)
-            - DNS: Skipped
-                    - Status: DNS configuration is not required as the DNS servers are already defined.
-            - SNTP: Skipped
-                    - Status: SNTP configuration is not required as the SNTP servers are already defined.
-            - iLO firmware: Skipped
-                    - Status: iLO5 firmware update is not needed as firmware is v3.09 or higher.
-            - iLO connection to COM: InProgress
-                    - Status: iLO successfully connected to COM.
-            - Tags: InProgress
-            - DNS: Skipped
-                    - Status: DNS configuration is not required as the DNS servers are already defined.
-            - SNTP: Skipped
-                    - Status: SNTP configuration is not required as the SNTP servers are already defined.
-            - iLO firmware: Skipped
-                    - Status: iLO5 firmware update is not needed as firmware is v3.09 or higher.
-            - iLO connection to COM: InProgress
-                    - Status: iLO successfully connected to COM.
-            - Tags: InProgress
-            - Tags: InProgress
-                    - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
-            - Location: InProgress
+                    - Status: No current location assigned. Proceeding to assign new location.
                     - Status: Location assigned successfully.
 
     - [192.168.1.56] (v1.62 iLO6 - Model:DL365 Gen11 - SN:CZJ3100GD9)
+            - Onboarding method selected: Activation Key
             - DNS: Skipped
                     - Status: DNS configuration is not required as the DNS servers are already defined.
             - SNTP: InProgress
@@ -327,18 +364,28 @@ Output:
                     - Status: Reconnecting to iLO...
                     - Status: Waiting for iLO to be ready for COM connection...
                     - Status: iLO is ready for COM connection.
+            - COM activation key: InProgress
+                 - Status: Successfully generated COM standard activation key 'VCC7G2A64' for region 'eu-central'.                    
             - iLO connection to COM: InProgress
                     - Status: iLO successfully connected to COM.
             - Tags: InProgress
+                    - Status: Existing tags removed successfully.
                     - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
             - Location: InProgress
+                    - Status: No current location assigned. Proceeding to assign new location.
                     - Status: Location assigned successfully.
 
-    Operation completed successfully! All servers have been configured and connected to the Compute Ops Management instance in the 'eu-central' region.
-    The status of the operation has been exported to 'Z:\Onboarding\iLO_Onboarding_Status_20250227_1046.csv'
+    Onboarding summary: 3 succeeded, 0 failed, 0 warnings, 0 skipped (Total: 3)
+    
+    ✅ Onboarding completed successfully for all servers!
+        All servers have been configured and connected to Compute Ops Management in the 'eu-central' region.
+
+    📄 Status report exported to: Z:\Onboarding\iLO_Onboarding_Status_20250227_1046.csv'
+
+    email@domain.com session disconnected!
     Hit return to close:
 
-```
+
 .NOTES
 
 Note: The script generates a CSV file with the status of the operation, including the iLO IP address, hostname, serial number, iLO generation, iLO firmware version, server model, and the status of the configuration and connection to COM.
@@ -855,6 +902,7 @@ catch {
         }
         else {
             # Ask for password
+            Write-Host ""
             $HPEAccountSecuredPassword = Read-Host -AsSecureString "Enter password for your HPE GreenLake account '$HPEAccount'"
             $GLPcredentials = New-Object System.Management.Automation.PSCredential ($HPEAccount, $HPEAccountSecuredPassword)
             # Connect to HPE GreenLake workspace
@@ -3747,7 +3795,7 @@ $totalCount = ($iLOPreparationStatus | Measure-Object).Count
 
 if (-not $Check) {
     $reportFile = $OnboardingReportFile
-    Write-Host "`nOnboarding summary: $successCount succeeded, $failureCount failed, $WarningCount warnings, $skippedCount skipped (Total: $totalCount)" -ForegroundColor Cyan
+    Write-Host "`nOnboarding summary: $successCount succeeded, $failureCount failed, $WarningCount warnings, $skippedCount skipped (Total: $totalCount)`n" -ForegroundColor Cyan
 
     if ($successCount -eq $totalCount) {
         Write-Host "✅ Onboarding completed successfully for all servers!" -ForegroundColor Green
@@ -3760,7 +3808,7 @@ if (-not $Check) {
 }
 else {
     $reportFile = $CheckReportFile
-    Write-Host "`nCheck summary: $successCount succeeded, $failureCount failed, $WarningCount warnings, $skippedCount skipped (Total: $totalCount)" -ForegroundColor Cyan
+    Write-Host "`nCheck summary: $successCount succeeded, $failureCount failed, $WarningCount warnings, $skippedCount skipped (Total: $totalCount)`n" -ForegroundColor Cyan
     
     if ($successCount -eq $totalCount) {
         Write-Host "✅ Status check completed successfully for all servers!" -ForegroundColor Green
@@ -3775,7 +3823,7 @@ else {
 
 # Export status report 
 Export-StatusReport -FilePath $reportFile -StatusData $iLOPreparationStatus
-Write-Host "`n📄 Status report exported to: $reportFile" -ForegroundColor Cyan
+Write-Host "`n📄 Status report exported to: $reportFile`n" -ForegroundColor Cyan
 
 #EndRegion
     

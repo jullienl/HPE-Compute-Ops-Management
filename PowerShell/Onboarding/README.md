@@ -157,80 +157,117 @@ For detailed information about all changes and improvements, refer to the `.WHAT
 **Output:**
 
 ```
-Enter password for iLO account 'admin': ********
-Enter password for your HPE GreenLake account 'email@domain.com': ********
+    Enter password for iLO account 'administrator': ********
 
-[Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
+    Verifying the authenticity and integrity of the HPEiLOCmdlets module...
+    Verifying file: HPEiLOCmdlets.resources.dll
+    Verifying file: HPEiLOCmdlets.resources.dll
+    Verifying file: AutoMapper.dll
+    Verifying file: DeepCloner.dll
+    Verifying file: HPEiLOCmdlets.dll
+    Verifying file: HPEiLOCmdlets.psd1
+    Verifying file: log4net.dll (third-party library)
+    Verifying file: Newtonsoft.Json.dll
+    Verifying file: System.Reflection.TypeExtensions.dll
+    HPEiLOCmdlets module verification successful. All signatures, certificates, and metadata are valid.
+    Proceeding to import module...
 
-------------------------------
-COM CONFIGURATION CHECK STATUS
-------------------------------
-- Provisionned instance: OK
-- Subscription: OK                                                                                                    
-        - Status: Sufficient licenses available (19) for the number of iLOs (3).
-- Location: Failed
-        - Status: Location 'Nice' not found in the HPE GreenLake workspace. Please create the location before running this script.
+    Verifying the authenticity and integrity of the HPECOMCmdlets module...
+    Verifying file: HPECOMCmdlets.Format.ps1xml
+    Verifying file: HPECOMCmdlets.psd1
+    Verifying file: HPECOMCmdlets.psm1
+    HPECOMCmdlets module verification successful. All signatures, certificates, and metadata are valid.
+    Proceeding to import module...
 
-------------------------------
-iLO CONFIGURATION CHECK STATUS
-------------------------------
+    Enter password for your HPE GreenLake account 'email@domain.com': ********
 
-- [192.168.0.20] (v3.08 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004G)
-        - DNS: Warning
-                - Current: None
-                - Missing: 192.168.2.1, 192.168.2.3
-        - SNTP: Warning
-                - Current: None
-                - Missing: 1.1.1.1, 2.2.2.2
-        - iLO firmware: Warning
-                - Current: 3.08
-                - Required: 3.09
-        - iLO connection to COM: Disconnected
-        - Tags: Warning
-                - Current: None                                                                                        
-                - Missing: Country=FR, App=AI, Department=IT
-        - Location: Warning
-                - Current: None                                                                                        
-                - Required: Nice
+    [Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
 
-- [192.168.0.21] (v3.1 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004H)
-        - DNS: Ok
-                - Current: 192.168.2.1, 192.168.2.3
-                - Missing: None
-        - SNTP: Ok
-                - Current: 1.1.1.1, 2.2.2.2
-                - Missing: None
-        - iLO firmware: OK
-                - Current: 3.1
-                - Required: 3.09
-        - iLO connection to COM: Disconnected
-        - Tags: Warning
-                - Current: None                                                                                        
-                - Missing: Country=FR, App=AI, Department=IT
-        - Location: Warning
-                - Current: None                                                                                        
-                - Required: Nice
+    ------------------------------
+    COM CONFIGURATION CHECK STATUS
+    ------------------------------
+    - Provisionned instance: OK
+    - Subscription: OK                                                                                                    
+            - Status: Sufficient licenses available (19) for the number of iLOs (3).
+    - Location: Failed
+            - Status: Location 'Nice' not found in the HPE GreenLake workspace. Please create the location before running this script.
 
-- [192.168.1.56] (v1.62 iLO6 - Model:DL365 Gen11 - SN:CZJ3100GD9)
-        - DNS: Ok
-                - Current: 192.168.2.1, 192.168.2.3
-                - Missing: None
-        - SNTP: Warning
-                - Current: None
-                - Missing: 1.1.1.1, 2.2.2.2
-        - iLO firmware: Warning
-                - Current: 1.62
-                - Required: 1.64
-        - iLO connection to COM: Disconnected
-        - Tags: Warning
-                - Current: None                                                                                        
-                - Missing: Country=FR, App=AI, Department=IT
-        - Location: Warning
-                - Current: None                                                                                        
-                - Required: Nice
+    ------------------------------
+    iLO CONFIGURATION CHECK STATUS
+    ------------------------------
 
-The status of the check has been exported to 'Z:\Onboarding\iLO_Check_Status_20250227_1011.csv'
-Hit return to close:
+    - [192.168.0.20] (v3.08 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004G)
+            - Onboarding method selected: Activation Key
+            - DNS: Warning
+                    - Current: None
+                    - Missing: 192.168.2.1, 192.168.2.3
+            - SNTP: Warning
+                    - Current: None
+                    - Missing: 1.1.1.1, 2.2.2.2
+            - iLO firmware: Warning
+                    - Current: 3.08
+                    - Required: 3.09 or later
+            - iLO connection to COM: Disconnected
+                - Status: iLO not connected to COM. Current status: NotEnabled  
+            - Tags: Warning
+                    - Current: None                                                                                        
+                    - Missing: Country=FR, App=AI, Department=IT
+                    - Extra: None
+            - Location: Warning
+                    - Current: None                                                                                        
+                    - Required: Nice
+
+    - [192.168.0.21] (v3.1 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004H)
+            - Onboarding method selected: Activation Key
+            - DNS: Ok
+                    - Current: 192.168.2.1, 192.168.2.3
+                    - Missing: None
+            - SNTP: Ok
+                    - Current: 1.1.1.1, 2.2.2.2
+                    - Missing: None
+            - iLO firmware: OK
+                    - Current: 3.1
+                    - Required: 3.09 or later
+            - iLO connection to COM: Connected
+                    - Status: iLO already connected to COM.
+            - Tags: Warning
+                    - Current: None                                                                                        
+                    - Missing: Country=FR, App=AI, Department=IT
+                    - Extra: None
+            - Location: Warning
+                    - Current: None                                                                                        
+                    - Required: Nice
+
+    - [192.168.1.56] (v1.62 iLO6 - Model:DL365 Gen11 - SN:CZJ3100GD9)
+            - Onboarding method selected: Activation Key
+            - DNS: Ok
+                    - Current: 192.168.2.1, 192.168.2.3
+                    - Missing: None
+            - SNTP: Warning
+                    - Current: None
+                    - Missing: 1.1.1.1, 2.2.2.2
+            - iLO firmware: Warning
+                    - Current: 1.62
+                    - Required: 1.64 or later
+            - iLO connection to COM: Disconnected
+            - Tags: Warning
+                    - Current: Country=FR                                                                                        
+                    - Missing: Department=IT, App=AI
+                    - Extra: None
+            - Location: Warning
+                    - Current: None                                                                                        
+                    - Required: Nice
+
+    
+    Check summary: 0 succeeded, 0 failed, 3 warnings, 0 skipped (Total: 3)
+
+    ⚠️ Status check completed with issues!
+        Please review the detailed status report and resolve any issues before proceeding to onboarding.
+    
+    📄 Status report exported to: Z:\Onboarding\iLO_Check_Status_20250227_1011.csv
+
+    email@domain.com session disconnected!
+    Hit return to close:
 ```
 
 **Example 2: Onboarding**
@@ -242,102 +279,118 @@ Hit return to close:
 **Output:**
 
 ```
-Enter password for iLO account 'admin': ********
-Enter password for your HPE GreenLake account 'email@domain.com': ********
+    Enter password for iLO account 'administrator': ********
 
-[Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
-[Workspace: HPE Mougins] - COM instance 'eu-central' successfully found.
-[Workspace: HPE Mougins] - Sufficient licenses available (19) for the number of iLOs (3).                               
-[Workspace: HPE Mougins] - Successfully generated COM activation key '3CJ7S2DH8' for region 'eu-central'.
+    Verifying the authenticity and integrity of the HPEiLOCmdlets module...
+    Verifying file: HPEiLOCmdlets.resources.dll
+    Verifying file: HPEiLOCmdlets.resources.dll
+    Verifying file: AutoMapper.dll
+    Verifying file: DeepCloner.dll
+    Verifying file: HPEiLOCmdlets.dll
+    Verifying file: HPEiLOCmdlets.psd1
+    Verifying file: log4net.dll (third-party library)
+    Verifying file: Newtonsoft.Json.dll
+    Verifying file: System.Reflection.TypeExtensions.dll
+    HPEiLOCmdlets module verification successful. All signatures, certificates, and metadata are valid.
+    Proceeding to import module...
 
-- [192.168.0.20] (v3.08 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004G)
-        - DNS: InProgress
-                - Status: DNS settings set successfully!
-        - SNTP: InProgress
-                - Status: SNTP settings set successfully. Message: ResetRequired
-                - Status: Changes to SNTP configuration requires an iLO reset in order to take effect. Waiting for the reset to be performed...
-                - Status: iLO reset has been detected. Waiting for iLO to be back online...
-                - Status: iLO SNTP settings updated successfully and iLO is back online.
-                - Status: Reconnecting to iLO...
-        - iLO firmware: InProgress
-                - Status: iLO5 firmware update in progress as firmware is lower than v3.09...
-                - Status: iLO firmware must be activated. Waiting for the reset to be performed...
-                - Status: iLO reset has been detected. Waiting for iLO to be back online...
-                - Status: iLO firmware updated successfully and iLO is back online.
-                - Status: Reconnecting to iLO...
-                - Status: Waiting for iLO to be ready for COM connection...
-                - Status: iLO is ready for COM connection.
-        - iLO connection to COM: InProgress
-                - Status: iLO successfully connected to COM.
-        - Tags: InProgress                                                                                             
-                - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
-        - Location: InProgress
-                - Status: Location assigned successfully.
+    Verifying the authenticity and integrity of the HPECOMCmdlets module...
+    Verifying file: HPECOMCmdlets.Format.ps1xml
+    Verifying file: HPECOMCmdlets.psd1
+    Verifying file: HPECOMCmdlets.psm1
+    HPECOMCmdlets module verification successful. All signatures, certificates, and metadata are valid.
+    Proceeding to import module...
 
-- [192.168.0.21] (v3.1 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004H)
-        - DNS: Skipped
-                - Status: DNS configuration is not required as the DNS servers are already defined.
-        - SNTP: Skipped
-                - Status: SNTP configuration is not required as the SNTP servers are already defined.
-        - iLO firmware: Skipped
-                - Status: iLO5 firmware update is not needed as firmware is v3.09 or higher.
-        - iLO connection to COM: InProgress
-                - Status: iLO successfully connected to COM.
-        - Tags: InProgress
-                - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
-        - Location: InProgress
-                - Status: Location assigned successfully.
+    Enter password for your HPE GreenLake account 'email@domain.com': ********
 
-- [192.168.0.21] (v3.1 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004H)
-        - DNS: Skipped
-                - Status: DNS configuration is not required as the DNS servers are already defined.
-        - SNTP: Skipped
-                - Status: SNTP configuration is not required as the SNTP servers are already defined.
-        - iLO firmware: Skipped
-                - Status: iLO5 firmware update is not needed as firmware is v3.09 or higher.
-        - iLO connection to COM: InProgress
-                - Status: iLO successfully connected to COM.
-        - Tags: InProgress
-        - DNS: Skipped
-                - Status: DNS configuration is not required as the DNS servers are already defined.
-        - SNTP: Skipped
-                - Status: SNTP configuration is not required as the SNTP servers are already defined.
-        - iLO firmware: Skipped
-                - Status: iLO5 firmware update is not needed as firmware is v3.09 or higher.
-        - iLO connection to COM: InProgress
-                - Status: iLO successfully connected to COM.
-        - Tags: InProgress
-                - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
-        - Location: InProgress
-                - Status: Location assigned successfully.
+    [Workspace: HPE Mougins] - Successfully connected to the HPE GreenLake workspace.
+    [Workspace: HPE Mougins] - COM instance 'eu-central' successfully found.
+    [Workspace: HPE Mougins] - Sufficient licenses available (19) for the number of iLOs (3).                               
 
-- [192.168.1.56] (v1.62 iLO6 - Model:DL365 Gen11 - SN:CZJ3100GD9)
-        - DNS: Skipped
-                - Status: DNS configuration is not required as the DNS servers are already defined.
-        - SNTP: InProgress
-                - Status: SNTP settings set successfully. Message: ResetRequired
-                - Status: Changes to SNTP configuration requires an iLO reset in order to take effect. Waiting for the reset to be performed...
-                - Status: iLO reset has been detected. Waiting for iLO to be back online...
-                - Status: iLO SNTP settings updated successfully and iLO is back online.
-                - Status: Reconnecting to iLO...
-        - iLO firmware: InProgress
-                - Status: iLO6 firmware update in progress as firmware is lower than v1.64...
-                - Status: iLO firmware must be activated. Waiting for the reset to be performed...!
-                - Status: iLO reset has been detected. Waiting for iLO to be back online...
-                - Status: iLO is back online and iLO firmware updated successfully.
-                - Status: Reconnecting to iLO...
-                - Status: Waiting for iLO to be ready for COM connection...
-                - Status: iLO is ready for COM connection.
-        - iLO connection to COM: InProgress
-                - Status: iLO successfully connected to COM.
-        - Tags: InProgress
-                - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
-        - Location: InProgress
-                - Status: Location assigned successfully.
+    - [192.168.0.20] (v3.08 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004G)
+            - Onboarding method selected: Activation Key
+            - DNS: InProgress
+                    - Status: DNS settings set successfully!
+            - SNTP: InProgress
+                    - Status: SNTP settings set successfully. Message: ResetRequired
+                    - Status: Changes to SNTP configuration requires an iLO reset in order to take effect. Waiting for the reset to be performed...
+                    - Status: iLO reset has been detected. Waiting for iLO to be back online...
+                    - Status: iLO SNTP settings updated successfully and iLO is back online.
+                    - Status: Reconnecting to iLO...
+            - iLO firmware: InProgress
+                    - Status: iLO5 firmware update in progress as firmware is lower than v3.09...
+                    - Status: iLO firmware must be activated. Waiting for the reset to be performed...
+                    - Status: iLO reset has been detected. Waiting for iLO to be back online...
+                    - Status: iLO firmware updated successfully and iLO is back online.
+                    - Status: Reconnecting to iLO...
+                    - Status: Waiting for iLO to be ready for COM connection...
+                    - Status: iLO is ready for COM connection.
+            - COM activation key: InProgress
+                 - Status: Successfully generated COM standard activation key 'VCC7G2A64' for region 'eu-central'.    
+            - iLO connection to COM: InProgress
+                    - Status: iLO successfully connected to COM.
+            - Tags: InProgress                                                                                             
+                    - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
+            - Location: InProgress
+                    - Status: No current location assigned. Proceeding to assign new location.
+                    - Status: Location assigned successfully.
 
-Operation completed successfully! All servers have been configured and connected to the Compute Ops Management instance in the 'eu-central' region.
-The status of the operation has been exported to 'Z:\Onboarding\iLO_Onboarding_Status_20250227_1046.csv'
-Hit return to close:
+    - [192.168.0.21] (v3.1 iLO5 - Model:DL360 Gen10Plus - SN:CZ2311004H)
+            - Onboarding method selected: Activation Key
+            - DNS: Skipped
+                    - Status: DNS configuration is not required as the DNS servers are already defined.
+            - SNTP: Skipped
+                    - Status: SNTP configuration is not required as the SNTP servers are already defined.
+            - iLO firmware: Skipped
+                    - Status: iLO5 firmware update is not needed as firmware is v3.09 or higher.
+            - COM activation key: InProgress
+                 - Status: Successfully generated COM standard activation key 'VCC7G2A64' for region 'eu-central'. 
+            - iLO connection to COM: InProgress
+                    - Status: iLO successfully connected to COM.
+            - Tags: InProgress
+                    - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
+            - Location: InProgress
+                    - Status: No current location assigned. Proceeding to assign new location.
+                    - Status: Location assigned successfully.
+
+    - [192.168.1.56] (v1.62 iLO6 - Model:DL365 Gen11 - SN:CZJ3100GD9)
+            - Onboarding method selected: Activation Key
+            - DNS: Skipped
+                    - Status: DNS configuration is not required as the DNS servers are already defined.
+            - SNTP: InProgress
+                    - Status: SNTP settings set successfully. Message: ResetRequired
+                    - Status: Changes to SNTP configuration requires an iLO reset in order to take effect. Waiting for the reset to be performed...
+                    - Status: iLO reset has been detected. Waiting for iLO to be back online...
+                    - Status: iLO SNTP settings updated successfully and iLO is back online.
+                    - Status: Reconnecting to iLO...
+            - iLO firmware: InProgress
+                    - Status: iLO6 firmware update in progress as firmware is lower than v1.64...
+                    - Status: iLO firmware must be activated. Waiting for the reset to be performed...!
+                    - Status: iLO reset has been detected. Waiting for iLO to be back online...
+                    - Status: iLO is back online and iLO firmware updated successfully.
+                    - Status: Reconnecting to iLO...
+                    - Status: Waiting for iLO to be ready for COM connection...
+                    - Status: iLO is ready for COM connection.
+            - COM activation key: InProgress
+                 - Status: Successfully generated COM standard activation key 'VCC7G2A64' for region 'eu-central'.                    
+            - iLO connection to COM: InProgress
+                    - Status: iLO successfully connected to COM.
+            - Tags: InProgress
+                    - Status: Existing tags removed successfully.
+                    - Status: Tags 'Country=FR, App=AI, Department=IT' added successfully.
+            - Location: InProgress
+                    - Status: No current location assigned. Proceeding to assign new location.
+                    - Status: Location assigned successfully.
+
+    Onboarding summary: 3 succeeded, 0 failed, 0 warnings, 0 skipped (Total: 3)
+    
+    ✅ Onboarding completed successfully for all servers!
+        All servers have been configured and connected to Compute Ops Management in the 'eu-central' region.
+
+    📄 Status report exported to: Z:\Onboarding\iLO_Onboarding_Status_20250227_1046.csv'
+
+    email@domain.com session disconnected!
+    Hit return to close:
 ```
 
 **Note:** The script generates a CSV file with the status of the operation, including the iLO IP address, hostname, serial number, iLO generation, iLO firmware version, server model, and the status of the configuration and connection to COM.
