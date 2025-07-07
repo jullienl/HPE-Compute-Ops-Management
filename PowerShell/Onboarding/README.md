@@ -26,9 +26,11 @@ IP
 
 **Note:** The first line is the header and must be "IP".
 
-To see a demonstration of this script in action, watch the video — please note that it was created during the initial phase of development, and many aspects have been improved since then:
+To see a demonstration of this script in action, watch the video:
 
 [![Preparing and connecting HPE Servers to Compute Ops Management with PowerShell](https://img.youtube.com/vi/ZV0bmqmODmU/0.jpg)](https://youtu.be/ZV0bmqmODmU)
+
+**Note:** This video was recorded during the early development phase of the script. The script has since been significantly enhanced, and some features or outputs shown in the video may differ from the current version.
 
 The script performs the following actions:
 
@@ -63,6 +65,7 @@ The script can be run with the following parameters:
 
 The script includes a comprehensive "What's New" section in the header that documents all recent updates and improvements. Key highlights include:
 
+- **July 7, 2025**: Improved subscription key selection logic: the script now strictly filters out non-Compute Ops Management and evaluation subscriptions, ensuring only valid, eligible subscriptions are used for onboarding.
 - **July 2, 2025**: Added many improvements to the entire script. Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script. Improved on-screen reporting for "Unsupported/Skipped" servers.
 - **July 1, 2025**: General improvements, bug fixes, and enhanced compatibility for A55/A56 server hardware platforms (Gen11)
 - **June 10, 2025**: Fixed COM activation key assignment and subscription validation issues

@@ -3,6 +3,9 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+July 7, 2025
+ - Improved subscription key selection logic: the script now strictly filters out non-Compute Ops Management and evaluation subscriptions, ensuring only valid, eligible subscriptions are used for onboarding.
+
 July 2, 2025
  - Added many improvements and bug fixes to the entire script.
  - Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script.
@@ -980,7 +983,10 @@ catch {
 try {
 
     $AvailableCOMSubscription = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
-            
+    
+    # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions
+    $AvailableCOMSubscription = $AvailableCOMSubscription | Where-Object { $_.tier -eq "ENHANCED_PROLIANT" -and $_.isEval -ne $true }
+
     $TotalCount = ($AvailableCOMSubscription | Select-Object -ExpandProperty AvailableQuantity) | Measure-Object -Sum | Select-Object -ExpandProperty Sum
         
     if (-not $Check) {
@@ -2884,8 +2890,10 @@ ForEach ($iLO in $iLOs) {
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - No existing COM {7} activation key found matching criteria. Generating a new one..." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType | Write-Verbose
             
                     # Get a valid subscription key for the server
-                    $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop | 
-                    Select-Object -First 1 -ExpandProperty key
+                    $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
+                     
+                    # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
+                    $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -eq "ENHANCED_PROLIANT" -and $_.isEval -ne $true } | Select-Object -First 1 -ExpandProperty key
 
                     if (-not $SubscriptionKey) {      
                         "`t`t - Status: " | Write-Host -NoNewline
@@ -3058,7 +3066,12 @@ ForEach ($iLO in $iLOs) {
             # Add COM service subscription to the compute device
             try {
 
-                $SubscriptionKey = Get-HPEGLSubscription -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -ShowDeviceSubscriptions | Select-Object -First 1 | Select-Object -ExpandProperty key
+                # Get a valid subscription key for the server
+                $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
+                    
+                # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
+                $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -eq "ENHANCED_PROLIANT" -and $_.isEval -ne $true } | Select-Object -First 1 -ExpandProperty key
+
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Compute Ops Management service subscription found: {0}" -f $SubscriptionKey | Write-Host -ForegroundColor Green
 
