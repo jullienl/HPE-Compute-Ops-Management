@@ -65,7 +65,7 @@ The script can be run with the following parameters:
 
 The script includes a comprehensive "What's New" section in the header that documents all recent updates and improvements. Key highlights include:
 
-- **July 7, 2025**: Improved subscription key selection logic: the script now strictly filters out non-Compute Ops Management and evaluation subscriptions, ensuring only valid, eligible subscriptions are used for onboarding.
+- **July 8, 2025**: Added a new feature to the script that allows users to specify the subscription tier and whether to include evaluation subscriptions. This provides more flexibility in selecting the appropriate COM subscription for onboarding.
 - **July 2, 2025**: Added many improvements to the entire script. Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script. Improved on-screen reporting for "Unsupported/Skipped" servers.
 - **July 1, 2025**: General improvements, bug fixes, and enhanced compatibility for A55/A56 server hardware platforms (Gen11)
 - **June 10, 2025**: Fixed COM activation key assignment and subscription validation issues

@@ -3,27 +3,23 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
-July 7, 2025
- - Improved subscription key selection logic: the script now strictly filters out non-Compute Ops Management and evaluation subscriptions, ensuring only valid, eligible subscriptions are used for onboarding.
-
+July 8, 2025
+ - Added support for user-defined subscription tier selection and evaluation subscription inclusion. Users can now specify the desired COM subscription tier (e.g., ProLiant or Alletra) and choose whether to include evaluation subscriptions, providing greater flexibility and control during onboarding.
 July 2, 2025
  - Added many improvements and bug fixes to the entire script.
  - Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script.
  - Improved on-screen reporting for "Unsupported/Skipped" servers, clearly indicating when a server is skipped and providing the specific reason for skipping.
-
 July 1, 2025:
  - Added general improvements and bug fixes to the entire script.
  - Added special logic for A55/A56 server hardware platforms (Gen11) to handle compatibility between iLO firmware and system ROM versions, per customer advisory: https://support.hpe.com/hpesc/public/docDisplay?docId=emr_na-a00143446en_us.
  - Enhanced error handling and streamlined logging for clearer output and easier troubleshooting.
  - Fixed CSV export to always generate the file in the script directory and prevent duplicate reports.
  - The authenticity and integrity verification output for the modules has been streamlined to display only essential information and critical alerts.
-
- June 10, 2025:
+June 10, 2025:
  - Fixed a bug where the script could select a COM activation key without an associated subscription key, which caused license assignment failures during onboarding. The script now ensures that only activation keys with valid subscription assignments are used.
  - Fixed a bug where the script did not always generate a new COM activation key with a valid subscription key, leading to onboarding failures. The script now always generates a new activation key that is properly associated with a subscription.
  - The script now verifies that the COM activation key will remain valid for at least 10 minutes before use, preventing onboarding failures due to imminent key expiration.
-
- June 4, 2025:
+June 4, 2025:
  - Improved session reliability: The script now actively maintains the HPE GreenLake session throughout execution to prevent timeouts that could disrupt operations.
  - Enhanced documentation: Added guidance in the script header for optimizing performance during large-scale server onboarding and reducing firmware update delays.
  - Module management improvements: The script always installs and uses the latest version of HPEiLOCmdlets, ensuring compatibility with PowerShell 7.5.0 and resolving known PSCredential login issues.
@@ -511,6 +507,23 @@ $OktaSSOEmail = $false
 # $OktaSSOEmail = $true 
 
 # ========================================================================================================
+# HPE GREENLAKE COM SUBSCRIPTION KEY CONFIGURATION
+# ========================================================================================================
+
+# The script will automatically select the first available subscription key that matches your criteria.
+
+# You can control which subscription tier and evaluation status to use:
+#   - $SubscriptionTier: Set to 'PROLIANT' or 'ALLETRA' to match your device type.
+#   - $UseEval: Set to $True to allow evaluation subscriptions, or $False to exclude them.
+
+# Supported Subscription Tiers:
+#   - Standard-ProLiant, Enhanced-ProLiant, Advanced-ProLiant
+#   - Standard-Alletra, Enhanced-Alletra, Advanced-Alletra
+
+$SubscriptionTier = "PROLIANT"   # Use 'PROLIANT' for ProLiant servers, 'ALLETRA' for Alletra devices
+$UseEval = $False                # Set to $True to include evaluation subscriptions, $False to exclude them
+
+# ========================================================================================================
 # DEVICE ASSIGNMENT CONFIGURATION (Optional)
 # ========================================================================================================
 
@@ -985,7 +998,7 @@ try {
     $AvailableCOMSubscription = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
     
     # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions
-    $AvailableCOMSubscription = $AvailableCOMSubscription | Where-Object { $_.tier -eq "ENHANCED_PROLIANT" -and $_.isEval -ne $true }
+    $AvailableCOMSubscription = $AvailableCOMSubscription | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval }
 
     $TotalCount = ($AvailableCOMSubscription | Select-Object -ExpandProperty AvailableQuantity) | Measure-Object -Sum | Select-Object -ExpandProperty Sum
         
@@ -2893,7 +2906,7 @@ ForEach ($iLO in $iLOs) {
                     $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
                      
                     # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
-                    $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -eq "ENHANCED_PROLIANT" -and $_.isEval -ne $true } | Select-Object -First 1 -ExpandProperty key
+                    $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
 
                     if (-not $SubscriptionKey) {      
                         "`t`t - Status: " | Write-Host -NoNewline
@@ -3070,7 +3083,7 @@ ForEach ($iLO in $iLOs) {
                 $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
                     
                 # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
-                $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -eq "ENHANCED_PROLIANT" -and $_.isEval -ne $true } | Select-Object -First 1 -ExpandProperty key
+                $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
 
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Compute Ops Management service subscription found: {0}" -f $SubscriptionKey | Write-Host -ForegroundColor Green
