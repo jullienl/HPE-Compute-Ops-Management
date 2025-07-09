@@ -13,18 +13,31 @@ This preparation is essential to ensure that iLOs are ready for COM and can effe
 - **Setting up NTP**: To ensure the date and time of iLO are correct, crucial for securing the mutual TLS (mTLS) connections between COM and iLO.
 - **Updating iLO firmware**: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, or iLO6 1.64 or later).
 
-The script requires a CSV file that contains the list of iLO IP addresses or resolvable hostnames to be connected to COM.
+The script requires a CSV file and supports two options for iLO credentials:
 
-This CSV file must have the following format:
+1. All iLOs use the same account username and password. In this case, provide a CSV file with a header "IP" and a list of iLO IP addresses or resolvable hostnames to be connected to COM:
 
-```cs
-IP
-192.168.0.100
-192.168.0.101
-192.168.0.102
-```
+   ```cs
+   IP
+   192.168.0.100
+   192.168.0.101
+   192.168.0.102
+   ```
+   > The first line is the header and must be "IP".
 
-**Note:** The first line is the header and must be "IP".
+2. Each iLO uses a different username and/or password. In this case, provide a CSV file with headers "IP,UserName,Password" and specify the iLO IP address or hostname, username, and password for each entry:
+
+   ```cs
+   IP, UserName, Password
+   192.168.0.100, admin1, password1
+   192.168.0.101, admin2, password2
+   192.168.1.102, admin3, password3
+   ```
+   > The specified accounts must have Administrator privileges, or at minimum, the "Configure iLO Settings" privilege.
+
+Choose the CSV format that matches your environment.
+
+
 
 To see a demonstration of this script in action, watch the video:
 
@@ -105,8 +118,8 @@ For detailed information about all changes and improvements, refer to the `.WHAT
 
 ## How to use 
 
-1. Create a CSV file with the list of iLO IP addresses or resolvable hostnames to be connected to COM. The CSV file must have a header "IP" and contain the iLO IP addresses or hostnames in the first column.
-    - Example:
+1. Create a CSV file:
+    - Example1: For a single iLO username/password, the CSV file should look like this:
 
         ```cs
         IP
@@ -114,7 +127,18 @@ For detailed information about all changes and improvements, refer to the `.WHAT
         192.168.0.101
         192.168.0.102
         ```   
-    - Note: The first line is the header and must be "IP".
+        > The first line is the header and must be "IP".
+
+    - Example2: For different iLO credentials per device, the CSV file should look like this:
+
+        ```cs
+        IP, UserName, Password
+        192.168.0.20, admin1, password1
+        192.168.0.21, admin2, password2
+        192.168.1.56, admin3, password3
+        ```   
+        > The first line is the header and must be "IP, UserName, Password".
+
 2. Review and update the variables in the "Variables definition" section of the script as needed.
     
     All configuration variables are defined near the top of the script, in the section labeled:

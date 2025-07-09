@@ -445,7 +445,9 @@ param (
 # ========================================================================================================
 
 # Path to the CSV file containing the list of iLO IP addresses or resolvable hostnames
-# The CSV file must have a header "IP" and contain one iLO IP address or hostname per line
+# CSV file format options:
+# - For a single iLO username/password: The CSV file must have a header "IP" and list one iLO IP address or hostname per line.
+# - For different iLO credentials per device: The CSV file must have headers "IP,UserName,Password" and specify the iLO IP address or hostname, username, and password for each entry.
 $iLOcsvPath = "Z:\Onboarding\iLOs.csv"
 
 # Path to the iLO firmware flash files for iLO5 and iLO6
@@ -455,6 +457,9 @@ $iLO6binFile = "Z:\Onboarding\ilo6_166.bin"  # iLO6 firmware v1.66 or later
 
 # iLO account credentials
 # This account must have Administrator privileges or at minimum "Configure iLO Settings" privilege
+# If using different credentials per iLO, the CSV file must include the "UserName" and "Password" columns and in this case, the $iLOUserName variable is not used.
+# If using different credentials per iLO, the script will read the username and password from the CSV file.
+# If using the same credentials for all iLOs, specify the username here and the password will be prompted at runtime.
 $iLOUserName = "administrator"
 
 # HPE GreenLake workspace configuration
@@ -553,8 +558,6 @@ if ($PSVersionTable.PSVersion.Major -ne 7) {
     exit
 }
 
-# Ask for the iLO account password
-$iLOSecuredPassword = (Read-Host -AsSecureString "Enter password for iLO account '$iLOUserName'")
 
 # Importing iLO list
 if (-not (Test-Path $iLOcsvPath)) {
@@ -563,7 +566,44 @@ if (-not (Test-Path $iLOcsvPath)) {
     exit
 }
 else {
+    $iLOs = $null
     $iLOs = Import-Csv -Path $iLOcsvPath
+
+    if ($iLOs -eq $null -or $iLOs.Count -eq 0) {
+        "Error: The iLO CSV file '{0}' is empty or not formatted correctly. Please ensure it contains valid iLO IP addresses or hostnames." -f $iLOcsvPath | Write-Host -ForegroundColor Red
+        Read-Host -Prompt "Hit return to close" 
+        exit
+    }
+
+    # Check for UserName and Password columns
+    $hasIP = $iLOs[0].PSObject.Properties.Name -contains "IP"
+    $hasUserName = $iLOs[0].PSObject.Properties.Name -contains "UserName"
+    $hasPassword = $iLOs[0].PSObject.Properties.Name -contains "Password"
+
+    # Check if iLOs have the required header
+    if (-not $hasIP) {
+        "Error: The iLO CSV file '{0}' does not contain the required header 'IP'. Please ensure the CSV file is formatted correctly." -f $iLOcsvPath | Write-Host -ForegroundColor Red
+        Read-Host -Prompt "Hit return to close" 
+        exit
+    }
+    elseif ($hasUserName -and $hasPassword) {
+        # If UserName and Password are present, use them from the CSV file
+        $iLOSecuredPassword = $null
+    }
+    elseif ($hasUserName -and -not $hasPassword) {
+        "Error: The iLO CSV file '{0}' contains 'UserName' but missing 'Password' column. Please ensure both are present or remove 'UserName' to use the `$iLOUserName variable." -f $iLOcsvPath | Write-Host -ForegroundColor Red
+        Read-Host -Prompt "Hit return to close" 
+        exit
+    }
+    elseif ($hasPassword -and -not $hasUserName) {
+        "Error: The iLO CSV file '{0}' contains 'Password' but missing 'UserName' column. Please ensure both are present or remove 'Password' to use the `$iLOUserName variable." -f $iLOcsvPath | Write-Host -ForegroundColor Red
+        Read-Host -Prompt "Hit return to close" 
+        exit
+    }
+    else {
+        # Ask for the iLO account username and password
+        $iLOSecuredPassword = Read-Host -AsSecureString "Enter password for iLO account '$iLOUserName'"
+    }   
 }
 
 # Check if iLO firmware files are present
@@ -1191,6 +1231,13 @@ ForEach ($iLO in $iLOs) {
     #Region Connecting to iLO
 
     # Create credential for iLO
+
+    if ($hasUserName -and $hasPassword) {
+        # If UserName and Password are present, use them from the CSV file
+        $iLOUserName = $iLO.UserName
+        $iLOSecuredPassword = ConvertTo-SecureString -String $iLO.Password -AsPlainText -Force
+    }
+
     $iLOcredentials = New-Object System.Management.Automation.PSCredential($iLOUserName, $iLOSecuredPassword)
 
     $connectRetryCount = 0
