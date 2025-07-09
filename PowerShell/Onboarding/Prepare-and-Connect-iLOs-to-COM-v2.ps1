@@ -4,6 +4,7 @@ Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Conf
 
 .WHATSNEW
 July 9, 2025
+ - Added support for user-defined iLO credentials in the CSV file. Users can now specify different usernames and passwords for each iLO in the CSV file, allowing for greater flexibility in environments with varying iLO credentials.
  - Fixed a bug where the script could fail to connect to iLOs due to transient network issues or iLO unavailability. The script now retries the connection up to three times before failing, significantly improving robustness during onboarding.
  - Added logic to handle cases where the activation key may not be compatible with the server model being onboarded. The script now validates the compatibility of the subscription key assigned to the activation key with the server model before proceeding with onboarding.
 July 8, 2025
@@ -39,7 +40,14 @@ This preparation is essential to ensure that iLOs are ready for COM and can effe
 - Setting up NTP: To ensure the date and time of iLO are correct
 - Updating iLO firmware: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, or iLO6 1.64 or later).
 
-The script requires all iLOs to use the same iLO account username and password and a CSV file that contains the list of iLO IP addresses or resolvable hostnames to be connected to COM.
+The script requires a CSV file and supports two options for iLO credentials:
+
+1. All iLOs use the same account username and password. In this case, provide a CSV file with a header "IP" and a list of iLO IP addresses or resolvable hostnames to be connected to COM.
+
+2. Each iLO uses a different username and/or password. In this case, provide a CSV file with headers "IP,UserName,Password" and specify the iLO IP address or hostname, username, and password for each entry.
+   The specified account must have Administrator privileges, or at minimum, the "Configure iLO Settings" privilege.
+
+Choose the CSV format that matches your environment.
 
 To see a demonstration of this script in action, watch the following video: https://youtu.be/ZV0bmqmODmU.
 
@@ -103,12 +111,19 @@ How to use:
 
  1. Create a CSV file with the list of iLO IP addresses or resolvable hostnames to be connected to COM. The CSV file must have a header "IP" and contain the iLO IP addresses or hostnames in the first column.
  
-    - Example:
+    - Example1: For a single iLO username/password, the CSV file should look like this:
         IP
         192.168.0.20
         192.168.0.21
         192.168.1.56
     - Note: The first line is the header and must be "IP".
+
+    - Example2: For different iLO credentials per device, the CSV file should look like this:
+        IP,UserName,Password
+        192.168.0.20,admin1,password1
+        192.168.0.21,admin2,password2
+        192.168.1.56,admin3,password3
+    - Note: The first line is the header and must be "IP,UserName,Password".
 
  2. Review and update the variables in the "Variables definition" section of the script as needed.
     
@@ -3079,141 +3094,172 @@ ForEach ($iLO in $iLOs) {
         "`t - iLO connection to COM: " | Write-Host -NoNewline
         "InProgress" | Write-Host -f Yellow
         
-        if ($objStatus.OnboardingType -eq "Activation Key") {
-            
-            try {
-                if ($WebProxyUsername) {
-        
-                    $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
-                        -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
-                        -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -IloProxyUserName $WebProxyUsername -IloProxyPassword $WebProxyPassword `
-                        -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
-                }
-                elseif ($WebProxyServer) {
-        
-                    $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
-                        -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
-                        -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
-                }
-                elseif ($SecureGateway) {
-        
-                    $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
-                        -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
-                        -IloProxyServer $SecureGateway -IloProxyPort "8080" -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
-                }
-                else {
-                    $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
-                        -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
-                        -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop 
-                }    
-            }
-            catch {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Error connecting iLO to COM. Error: $_" | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.iLOConnectionStatus = "Failed"
-                $objStatus.iLOConnectionDetails = "Error connecting iLO to COM. Error: $($_)"
-                $objStatus.Status = "Failed"
-                [void]$iLOPreparationStatus.Add($objStatus)
-                continue
-            }
+        # Check if iLO is already connected to COM
+        $iLOCOMOnboardingStatus = Get-HPEiLOComputeOpsManagementStatus -Connection $iLOconnection -Verbose:$Verbose -ErrorAction Stop
+
+        if ($iLOCOMOnboardingStatus.CloudConnectStatus -eq "Connected" ) {
+
+            "`t`t - Status: " | Write-Host -NoNewline
+            "iLO is already connected to COM." | Write-Host -ForegroundColor Green
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO is already connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+            $objStatus.iLOConnectionStatus = "Success"
+            $objStatus.iLOConnectionDetails = "iLO is already connected to the Compute Ops Management instance."
+
         }
-        elseif ($objStatus.OnboardingType -eq "Workspace ID") {
-
-            # Add compute device to the currently connected HPE GreenLake workspace
-            try {
-                $AddComputeToWorkspace = Add-HPEGLDeviceCompute -SerialNumber $objStatus.SerialNumber -PartNumber $objStatus.PartNumber -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
-
-            }
-            catch {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Error adding compute to workspace. Error: $_" | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to workspace - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.AddComputeToWorkspaceStatus = "Failed"
-                $objStatus.AddComputeToWorkspaceDetails = "Error adding compute to workspace. Error: $($_)"
-                $objStatus.Status = "Failed"
-                [void]$iLOPreparationStatus.Add($objStatus)
-                continue
-            }
-
-            if ($AddComputeToWorkspace.status -eq "Failed") {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Compute not added to workspace successfully. Error: {0}" -f $AddComputeToWorkspace.details | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute not added to workspace successfully. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $AddComputeToWorkspace.details | Write-Verbose
-                $objStatus.AddComputeToWorkspaceStatus = "Failed"
-                $objStatus.AddComputeToWorkspaceDetails = "Compute not added to workspace successfully. Error: {0}" -f $AddComputeToWorkspace.details
-                $objStatus.Status = "Failed"
-                [void]$iLOPreparationStatus.Add($objStatus)
-                continue
-            }
-            else {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Compute added to workspace successfully." | Write-Host -ForegroundColor Green
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute added to workspace successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.AddComputeToWorkspaceStatus = "Success"
-                $objStatus.AddComputeToWorkspaceDetails = "Compute added to workspace successfully."
-            }
-
-            # Add the compute device to the COM service
-            try {
-                $AddComputeToCOMInstance = Add-HPEGLDeviceToService -DeviceSerialNumber $objStatus.SerialNumber -ServiceName "Compute Ops Management" -ServiceRegion $Region -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
-
-            }
-            catch {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Error adding compute to Compute Ops Management service. Error: $_" | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to Compute Ops Management service - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.AddComputeToCOMInstanceStatus = "Failed"
-                $objStatus.AddComputeToCOMInstanceDetails = "Error adding compute to Compute Ops Management service. Error: $($_)"
-                $objStatus.Status = "Failed"
-                [void]$iLOPreparationStatus.Add($objStatus)
-                continue
-            }
-
-            if ($AddComputeToCOMInstance.status -eq "Failed") {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Compute not added to Compute Ops Management service successfully. Error: {0}" -f $AddComputeToCOMInstance.details | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute not added to Compute Ops Management service successfully. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $AddComputeToCOMInstance.details | Write-Verbose
-                $objStatus.AddComputeToCOMInstanceStatus = "Failed"
-                $objStatus.AddComputeToCOMInstanceDetails = "Compute not added to Compute Ops Management service successfully. Error: {0}" -f $AddComputeToCOMInstance.details
-                $objStatus.Status = "Failed"
-                [void]$iLOPreparationStatus.Add($objStatus)
-                continue
-            }
-            else {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Compute added to Compute Ops Management service successfully." | Write-Host -ForegroundColor Green
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute added to Compute Ops Management service successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.AddComputeToCOMInstanceStatus = "Success"
-                $objStatus.AddComputeToCOMInstanceDetails = "Compute added to Compute Ops Management service successfully."
-            }
-
-            # Add COM service subscription to the compute device
-            try {
-
-                # Get a valid subscription key for the server
-                $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
-                    
-                # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
-                $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
-
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Compute Ops Management service subscription found: {0}" -f $SubscriptionKey | Write-Host -ForegroundColor Green
-
-                if (-not $SubscriptionKey) {
+        else {
+            if ($objStatus.OnboardingType -eq "Activation Key") {
+                
+                try {
+                    if ($WebProxyUsername) {
+            
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
+                            -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
+                            -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -IloProxyUserName $WebProxyUsername -IloProxyPassword $WebProxyPassword `
+                            -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+                    }
+                    elseif ($WebProxyServer) {
+            
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
+                            -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
+                            -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+                    }
+                    elseif ($SecureGateway) {
+            
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
+                            -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
+                            -IloProxyServer $SecureGateway -IloProxyPort "8080" -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+                    }
+                    else {
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
+                            -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
+                            -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop 
+                    }    
+                }
+                catch {
                     "`t`t - Status: " | Write-Host -NoNewline
-                    "Error retrieving a valid subscription key for the server. Please check your configuration and try again." | Write-Host -ForegroundColor Red 
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error retrieving a valid subscription key for the server. Please check your configuration and try again." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                    $objStatus.AddCOMSubscriptionStatus = "Failed"
-                    $objStatus.AddCOMSubscriptionDetails = "Error retrieving a valid subscription key for the server. Please check your configuration and try again."
+                    "Error connecting iLO to COM. Error: $_" | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                    $objStatus.iLOConnectionStatus = "Failed"
+                    $objStatus.iLOConnectionDetails = "Error connecting iLO to COM. Error: $($_)"
                     $objStatus.Status = "Failed"
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
                 }
-                                  
-                $AssignSubscriptionToDevice = Add-HPEGLSubscriptionToDevice $objStatus.SerialNumber -SubscriptionKey $SubscriptionKey -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+            }
+            elseif ($objStatus.OnboardingType -eq "Workspace ID") {
 
-                if ($AssignSubscriptionToDevice.status -eq "Failed") {
+                # Add compute device to the currently connected HPE GreenLake workspace
+                try {
+                    $AddComputeToWorkspace = Add-HPEGLDeviceCompute -SerialNumber $objStatus.SerialNumber -PartNumber $objStatus.PartNumber -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+
+                }
+                catch {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Error adding compute to workspace. Error: $_" | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to workspace - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                    $objStatus.AddComputeToWorkspaceStatus = "Failed"
+                    $objStatus.AddComputeToWorkspaceDetails = "Error adding compute to workspace. Error: $($_)"
+                    $objStatus.Status = "Failed"
+                    [void]$iLOPreparationStatus.Add($objStatus)
+                    continue
+                }
+
+                if ($AddComputeToWorkspace.status -eq "Failed") {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Compute not added to workspace successfully. Error: {0}" -f $AddComputeToWorkspace.details | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute not added to workspace successfully. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $AddComputeToWorkspace.details | Write-Verbose
+                    $objStatus.AddComputeToWorkspaceStatus = "Failed"
+                    $objStatus.AddComputeToWorkspaceDetails = "Compute not added to workspace successfully. Error: {0}" -f $AddComputeToWorkspace.details
+                    $objStatus.Status = "Failed"
+                    [void]$iLOPreparationStatus.Add($objStatus)
+                    continue
+                }
+                else {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Compute added to workspace successfully." | Write-Host -ForegroundColor Green
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute added to workspace successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                    $objStatus.AddComputeToWorkspaceStatus = "Success"
+                    $objStatus.AddComputeToWorkspaceDetails = "Compute added to workspace successfully."
+                }
+
+                # Add the compute device to the COM service
+                try {
+                    $AddComputeToCOMInstance = Add-HPEGLDeviceToService -DeviceSerialNumber $objStatus.SerialNumber -ServiceName "Compute Ops Management" -ServiceRegion $Region -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+
+                }
+                catch {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Error adding compute to Compute Ops Management service. Error: $_" | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to Compute Ops Management service - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                    $objStatus.AddComputeToCOMInstanceStatus = "Failed"
+                    $objStatus.AddComputeToCOMInstanceDetails = "Error adding compute to Compute Ops Management service. Error: $($_)"
+                    $objStatus.Status = "Failed"
+                    [void]$iLOPreparationStatus.Add($objStatus)
+                    continue
+                }
+
+                if ($AddComputeToCOMInstance.status -eq "Failed") {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Compute not added to Compute Ops Management service successfully. Error: {0}" -f $AddComputeToCOMInstance.details | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute not added to Compute Ops Management service successfully. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $AddComputeToCOMInstance.details | Write-Verbose
+                    $objStatus.AddComputeToCOMInstanceStatus = "Failed"
+                    $objStatus.AddComputeToCOMInstanceDetails = "Compute not added to Compute Ops Management service successfully. Error: {0}" -f $AddComputeToCOMInstance.details
+                    $objStatus.Status = "Failed"
+                    [void]$iLOPreparationStatus.Add($objStatus)
+                    continue
+                }
+                else {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Compute added to Compute Ops Management service successfully." | Write-Host -ForegroundColor Green
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute added to Compute Ops Management service successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                    $objStatus.AddComputeToCOMInstanceStatus = "Success"
+                    $objStatus.AddComputeToCOMInstanceDetails = "Compute added to Compute Ops Management service successfully."
+                }
+
+                # Add COM service subscription to the compute device
+                try {
+
+                    # Get a valid subscription key for the server
+                    $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
+                        
+                    # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
+                    $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
+
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Compute Ops Management service subscription found: {0}" -f $SubscriptionKey | Write-Host -ForegroundColor Green
+
+                    if (-not $SubscriptionKey) {
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "Error retrieving a valid subscription key for the server. Please check your configuration and try again." | Write-Host -ForegroundColor Red 
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error retrieving a valid subscription key for the server. Please check your configuration and try again." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                        $objStatus.AddCOMSubscriptionStatus = "Failed"
+                        $objStatus.AddCOMSubscriptionDetails = "Error retrieving a valid subscription key for the server. Please check your configuration and try again."
+                        $objStatus.Status = "Failed"
+                        [void]$iLOPreparationStatus.Add($objStatus)
+                        continue
+                    }
+                                    
+                    $AssignSubscriptionToDevice = Add-HPEGLSubscriptionToDevice $objStatus.SerialNumber -SubscriptionKey $SubscriptionKey -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+
+                    if ($AssignSubscriptionToDevice.status -eq "Failed") {
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "Error adding Compute Ops Management service subscription to compute. Error: $_" | Write-Host -ForegroundColor Red
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to Compute Ops Management service subscription - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                        $objStatus.AddCOMSubscriptionStatus = "Failed"
+                        $objStatus.AddCOMSubscriptionDetails = "Error adding compute to Compute Ops Management service subscription. Error: $($_)"
+                        $objStatus.Status = "Failed"
+                        [void]$iLOPreparationStatus.Add($objStatus)
+                        continue
+                    }
+                    else {
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "Compute Ops Management service subscription added to compute successfully." | Write-Host -ForegroundColor Green
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute Ops Management service subscription added to compute successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                        $objStatus.AddCOMSubscriptionStatus = "Success"
+                        $objStatus.AddCOMSubscriptionDetails = "Compute Ops Management service subscription added to compute successfully."
+                    }
+                }
+                catch {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Error adding Compute Ops Management service subscription to compute. Error: $_" | Write-Host -ForegroundColor Red
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to Compute Ops Management service subscription - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
@@ -3223,97 +3269,77 @@ ForEach ($iLO in $iLOs) {
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
                 }
-                else {
+
+                # Connect iLO to Compute Ops Management
+                try {
+                    if ($WebProxyUsername) {
+            
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
+                            -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
+                            -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -IloProxyUserName $WebProxyUsername -IloProxyPassword $WebProxyPassword `
+                            -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+                    }
+                    elseif ($WebProxyServer) {
+            
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
+                            -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
+                            -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+                    }
+                    elseif ($SecureGateway) {
+            
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
+                            -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
+                            -IloProxyServer $SecureGateway -IloProxyPort "8080" -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+                    }
+                    else {
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
+                            -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
+                            -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop 
+                    }    
+                }
+                catch {
                     "`t`t - Status: " | Write-Host -NoNewline
-                    "Compute Ops Management service subscription added to compute successfully." | Write-Host -ForegroundColor Green
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Compute Ops Management service subscription added to compute successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                    $objStatus.AddCOMSubscriptionStatus = "Success"
-                    $objStatus.AddCOMSubscriptionDetails = "Compute Ops Management service subscription added to compute successfully."
+                    "Error connecting iLO to COM. Error: $_" | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                    $objStatus.iLOConnectionStatus = "Failed"
+                    $objStatus.iLOConnectionDetails = "Error connecting iLO to COM. Error: $($_)"
+                    $objStatus.Status = "Failed"
+                    [void]$iLOPreparationStatus.Add($objStatus)
+                    continue
                 }
-            }
-            catch {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Error adding Compute Ops Management service subscription to compute. Error: $_" | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding compute to Compute Ops Management service subscription - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.AddCOMSubscriptionStatus = "Failed"
-                $objStatus.AddCOMSubscriptionDetails = "Error adding compute to Compute Ops Management service subscription. Error: $($_)"
-                $objStatus.Status = "Failed"
-                [void]$iLOPreparationStatus.Add($objStatus)
-                continue
-            }
 
+                # Check the iLO connection status to COM
 
-            # Connect iLO to Compute Ops Management
-            try {
-                if ($WebProxyUsername) {
-        
-                    $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
-                        -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
-                        -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -IloProxyUserName $WebProxyUsername -IloProxyPassword $WebProxyPassword `
-                        -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+                if ($OnboardingStatus.Status -eq "Failed" -or $OnboardingStatus.Status -eq "Warning") {
+                    # Handle failed/warning status
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Error connecting iLO to COM. Status: {0} - Details: {1}" -f $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Status: {7} - Details: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Verbose
+                    $objStatus.iLOConnectionStatus = $OnboardingStatus.Status
+                    $objStatus.iLOConnectionDetails = $OnboardingStatus.iLOConnectionDetails
+                    $objStatus.Status = $OnboardingStatus.Status
+                    $objStatus.Details = $OnboardingStatus.Details
+                    [void]$iLOPreparationStatus.Add($objStatus)
+                    continue
                 }
-                elseif ($WebProxyServer) {
-        
-                    $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
-                        -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
-                        -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
-                }
-                elseif ($SecureGateway) {
-        
-                    $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
-                        -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
-                        -IloProxyServer $SecureGateway -IloProxyPort "8080" -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
+                elseif ($OnboardingStatus.iLOConnectionDetails -match "iLO is already connected to the Compute Ops Management instance!") {
+                    # Handle already connected
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "iLO is already connected to COM." | Write-Host -ForegroundColor Green
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO is already connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                    $objStatus.iLOConnectionStatus = "Success"
+                    $objStatus.iLOConnectionDetails = "iLO is already connected to the Compute Ops Management instance."
                 }
                 else {
-                    $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
-                        -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
-                        -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop 
-                }    
-            }
-            catch {
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Error connecting iLO to COM. Error: $_" | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.iLOConnectionStatus = "Failed"
-                $objStatus.iLOConnectionDetails = "Error connecting iLO to COM. Error: $($_)"
-                $objStatus.Status = "Failed"
-                [void]$iLOPreparationStatus.Add($objStatus)
-                continue
-            }
+                    # Handle successful new connection
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "iLO successfully connected to COM." | Write-Host -ForegroundColor Green
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO successfully connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                    $objStatus.iLOConnectionStatus = "Success"
+                    $objStatus.iLOConnectionDetails = "iLO successfully connected to the Compute Ops Management instance."
+                }
+            }          
         }
-
-        # Check the iLO connection status to COM
-
-        if ($OnboardingStatus.Status -eq "Failed" -or $OnboardingStatus.Status -eq "Warning") {
-            # Handle failed/warning status
-            "`t`t - Status: " | Write-Host -NoNewline
-            "Error connecting iLO to COM. Status: {0} - Details: {1}" -f $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Host -ForegroundColor Red
-            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Status: {7} - Details: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Verbose
-            $objStatus.iLOConnectionStatus = $OnboardingStatus.Status
-            $objStatus.iLOConnectionDetails = $OnboardingStatus.iLOConnectionDetails
-            $objStatus.Status = $OnboardingStatus.Status
-            $objStatus.Details = $OnboardingStatus.Details
-            [void]$iLOPreparationStatus.Add($objStatus)
-            continue
-        }
-        elseif ($OnboardingStatus.iLOConnectionDetails -match "iLO is already connected to the Compute Ops Management instance!") {
-            # Handle already connected
-            "`t`t - Status: " | Write-Host -NoNewline
-            "iLO is already connected to COM." | Write-Host -ForegroundColor Green
-            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO is already connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-            $objStatus.iLOConnectionStatus = "Success"
-            $objStatus.iLOConnectionDetails = "iLO is already connected to the Compute Ops Management instance."
-        }
-        else {
-            # Handle successful new connection
-            "`t`t - Status: " | Write-Host -NoNewline
-            "iLO successfully connected to COM." | Write-Host -ForegroundColor Green
-            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO successfully connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-            $objStatus.iLOConnectionStatus = "Success"
-            $objStatus.iLOConnectionDetails = "iLO successfully connected to the Compute Ops Management instance."
-        }
-
-
         
         #EndRegion
 
