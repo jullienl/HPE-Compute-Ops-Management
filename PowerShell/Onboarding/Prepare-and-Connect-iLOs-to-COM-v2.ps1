@@ -3,6 +3,9 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+July 9, 2025
+ - Fixed a bug where the script could fail to connect to iLOs due to transient network issues or iLO unavailability. The script now retries the connection up to three times before failing, significantly improving robustness during onboarding.
+ - Added logic to handle cases where the activation key may not be compatible with the server model being onboarded. The script now validates the compatibility of the subscription key assigned to the activation key with the server model before proceeding with onboarding.
 July 8, 2025
  - Added support for user-defined subscription tier selection and evaluation subscription inclusion. Users can now specify the desired COM subscription tier (e.g., ProLiant or Alletra) and choose whether to include evaluation subscriptions, providing greater flexibility and control during onboarding.
 July 2, 2025
@@ -1152,7 +1155,9 @@ ForEach ($iLO in $iLOs) {
         PartNumber                     = $Null
         iLOGeneration                  = $Null
         iLOFirmwareVersion             = $Null
+        ProductName                    = $Null
         ServerModel                    = $Null
+        ServerFamily                   = $Null
         ServerGeneration               = $Null
         ServerSystemROM                = $Null
         ServerSystemROMVersion         = $Null
@@ -1185,57 +1190,54 @@ ForEach ($iLO in $iLOs) {
 
     #Region Connecting to iLO
 
-    # Testing network access to iLO
-    $pingResult = Test-Connection -ComputerName $iLO.IP -Count 2 -ErrorAction SilentlyContinue
+    # Create credential for iLO
+    $iLOcredentials = New-Object System.Management.Automation.PSCredential($iLOUserName, $iLOSecuredPassword)
 
-    if ($pingResult.Status -ne 'Success') {
-        "`n  - [{0}]" -f $iLO.IP | Write-Host
-        "`t - Connecting to iLO: " | Write-Host -NoNewline
-        "Failed" | Write-Host -f Red
-        "`t`t - Status: " | Write-Host -NoNewline	
-        "Unable to access iLO. Please check your network connection or ensure that your VPN is connected." -f $iLO.IP | Write-Host -f Red       
-        $objStatus.Status = "Failed"
-        $objStatus.Details = "Unable to access iLO at $($iLO.IP)"
-        [void]$iLOPreparationStatus.Add($objStatus)
-        continue
-        
+    $connectRetryCount = 0
+    $maxConnectRetries = 3
+    $iLOConnection = $null
+
+    while (-not $iLOConnection -and $connectRetryCount -lt $maxConnectRetries) {        
+        Try {        
+            if ($SkipCertificateValidation) {
+                $iLOConnection = Connect-HPEiLO -IP $iLO.IP -Credential $iLOcredentials -Verbose:$Verbose -DisableCertificateAuthentication -ErrorAction stop -Timeout 5
+            }
+            else {
+                $iLOConnection = Connect-HPEiLO -IP $iLO.IP -Credential $iLOcredentials -Verbose:$Verbose -ErrorAction stop -Timeout 5
+            }        
+        }
+        catch {
+            $connectRetryCount++
+            $errorMessage = $_.Exception.Message
+
+            if ($errorMessage -match "Could not establish trust relationship for the SSL/TLS secure channel") {
+                "`n  - [{0}]" -f $iLO.IP | Write-Host
+                "`t - Connecting to iLO: " | Write-Host -NoNewline
+                "Failed" | Write-Host -f Red
+                "`t`t - Status: " | Write-Host -NoNewline	
+                "TIP: Use the -SkipCertificateValidation switch to bypass certificate validation for iLOs with self-signed certificates. Use with caution." | Write-Host -f Yellow
+                $objStatus.Status = "Failed"
+                $objStatus.Details = "Error connecting to iLO: $($errorMessage). Consider using -SkipCertificateValidation."
+                [void]$iLOPreparationStatus.Add($objStatus)
+                break                
+            }
+            elseif ($connectRetryCount -ge $maxConnectRetries) {
+                "`n  - [{0}]" -f $iLO.IP | Write-Host
+                "`t - Connecting to iLO: " | Write-Host -NoNewline
+                "Failed" | Write-Host -f Red
+                "`t`t - Status: " | Write-Host -NoNewline	
+                "Error connecting to iLO after 3 attempts. Please verify network connectivity, firewall settings, and VPN access to the iLO network." | Write-Host -f Red
+                $objStatus.Status = "Failed"
+                $objStatus.Details = "Error connecting to iLO: $($errorMessage)"
+                [void]$iLOPreparationStatus.Add($objStatus)
+                break
+            }
+            else {               
+                Start-Sleep -Seconds 2
+            }
+        }
     }
     
-    $iLOcredentials = New-Object System.Management.Automation.PSCredential ($iLOUserName, $iLOSecuredPassword)
-    
-    Try {        
-        if ($SkipCertificateValidation) {
-            $iLOConnection = Connect-HPEiLO -IP $iLO.IP -Credential $iLOcredentials -Verbose:$Verbose -DisableCertificateAuthentication -ErrorAction stop 
-        }
-        else {
-            $iLOConnection = Connect-HPEiLO -IP $iLO.IP -Credential $iLOcredentials -Verbose:$Verbose -ErrorAction stop
-        }        
-       
-    }
-    catch {
-        if ($_ -match "Could not establish trust relationship for the SSL/TLS secure channel" -or $_ -match "No such host is known") {
-            "`n  - [{0}]" -f $iLO.IP | Write-Host
-            "`t - Connecting to iLO: " | Write-Host -NoNewline
-            "Failed" | Write-Host -f Red
-            "`t`t - Status: " | Write-Host -NoNewline	
-            "Use the -SkipCertificateValidation switch to bypass certificate validation for known hosts with self-signed certificates. Use with caution." -f $iLO.IP | Write-Host -f Red 
-            $objStatus.Status = "Failed"
-            $objStatus.Details = "Error connecting to iLO. Please use the -SkipCertificateValidation switch to bypass certificate validation."
-            [void]$iLOPreparationStatus.Add($objStatus)
-            continue
-        }
-        else {
-            "`n  - [{0}]" -f $iLO.IP | Write-Host
-            "`t - Connecting to iLO: " | Write-Host -NoNewline
-            "Failed" | Write-Host -f Red
-            "`t`t - Status: " | Write-Host -NoNewline	
-            "Error connecting to iLO. Error: {1}" -f $iLO.IP, $_ | Write-Host -f Red 
-            $objStatus.Status = "Failed"
-            $objStatus.Details = $_
-            [void]$iLOPreparationStatus.Add($objStatus)
-            continue
-        }
-    }
 
     #EndRegion 
 
@@ -1257,7 +1259,11 @@ ForEach ($iLO in $iLOs) {
         
         $objStatus.iLOFirmwareVersion = $iLOConnection.TargetInfo.iLOFirmwareVersion
         
+        $objStatus.ProductName = $iLOConnection.TargetInfo.ProductName
+        
         $objStatus.ServerModel = $iLOConnection.TargetInfo.ServerModel
+
+        $objStatus.ServerFamily = $iLOConnection.TargetInfo.ServerFamily
         
         $objStatus.ServerGeneration = $iLOConnection.TargetInfo.ServerGeneration
 
@@ -1320,12 +1326,6 @@ ForEach ($iLO in $iLOs) {
 
     }
     else {
-        "`n  - [{0}]" -f $iLO.IP | Write-Host
-        "`t - Connecting to iLO: " | Write-Host -NoNewline
-        "Failed" | Write-Host -f Red
-        $objStatus.Status = "Failed"
-        $objStatus.Details = "Error connecting to iLO. Error: $($iLOConnection)"
-        [void]$iLOPreparationStatus.Add($objStatus)
         continue
     }
 
@@ -2894,10 +2894,8 @@ ForEach ($iLO in $iLOs) {
                 }
 
                 # Check if an activation key already exists
-                $ExistingActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop | 
-                Where-Object $existingKeyCriteria |
-                Sort-Object expiresAt -Descending | 
-                Select-Object -First 1 -ExpandProperty ActivationKey
+                $ExistingServerActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop
+                $ExistingActivationKey = $ExistingServerActivationKey | Where-Object $existingKeyCriteria | Sort-Object expiresAt -Descending | Select-Object -First 1 -ExpandProperty ActivationKey
 
                 if (-not $ExistingActivationKey) {
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - No existing COM {7} activation key found matching criteria. Generating a new one..." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType | Write-Verbose
@@ -2942,11 +2940,78 @@ ForEach ($iLO in $iLOs) {
                     }
                 }
                 else {
+
                     # Use the existing activation key
                     "`t`t - Status: " | Write-Host -NoNewline
-                    "Existing COM {0} activation key '{1}' successfully retrieved for region '{2}'." -f $keyType, $ExistingActivationKey, $Region | Write-Host -ForegroundColor Green
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Existing COM {7} activation key '{8}' successfully retrieved for region '{9}'." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType, $ExistingActivationKey, $Region | Write-Verbose
-                    $COMActivationKey = $ExistingActivationKey
+
+                    # If an existing activation key is found, check the subscription key correspond to the server type 
+                    $MatchingSubscriptionKey = $ExistingServerActivationKey.subscriptionKey
+                    $SMatchingSubscriptionKeyTier = Get-HPEGLSubscription -SubscriptionKey $MatchingSubscriptionKey | Select-Object -ExpandProperty tier 
+
+                    # Determine the server family based on the product name
+                    $serverFamily = if ($objStatus.ProductName -match "ProLiant") { "ProLiant" }
+                    elseif ($objStatus.ProductName -match "Alletra") { "Alletra" }
+                    else { "Unknown" }
+                    
+                    # Check if the subscription key matches the server family
+                    if ($serverFamily -eq "Unknown") {
+                        "Validation: Error! Subscription tier '{0}' assigned to the activation key cannot be validated due to unknown server family for model ({1})." -f $SMatchingSubscriptionKeyTier, $objStatus.ProductName | Write-Host -ForegroundColor Red
+                        $objStatus.Status = "Failed"
+                        $objStatus.Details = "Subscription tier $($SMatchingSubscriptionKeyTier) assigned to the activation key cannot be validated due to unknown server family for model $($objStatus.ProductName)."
+                        [void]$iLOPreparationStatus.Add($objStatus)
+                        continue
+                    } 
+                    elseif ($SMatchingSubscriptionKeyTier -like "*$serverFamily*") {
+                        "Validation: Subscription tier '{0}' assigned to the activation key is compatible with server model ({1})." -f $SMatchingSubscriptionKeyTier, $objStatus.ProductName | Write-Host -ForegroundColor Green
+                        # Use the existing activation key
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "Existing COM {0} activation key '{1}' successfully retrieved for region '{2}'." -f $keyType, $ExistingActivationKey, $Region | Write-Host -ForegroundColor Green
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Existing COM {7} activation key '{8}' successfully retrieved for region '{9}'." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType, $ExistingActivationKey, $Region | Write-Verbose
+                        $COMActivationKey = $ExistingActivationKey
+                    } 
+                    else {
+                        "Validation: Subscription tier '{0}' assigned to the activation key is incompatible with {1} server ({2}). Generating a new activation key..." -f $SMatchingSubscriptionKeyTier, $serverFamily, $objStatus.ProductName | Write-Host -ForegroundColor Red
+                        # Generating a new activation key to match the server model
+                        
+                        # Get a valid subscription key for the server
+                        $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
+                        
+                        # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
+                        $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
+
+                        if (-not $SubscriptionKey) {      
+                            "`t`t - Status: " | Write-Host -NoNewline
+                            "Error retrieving a valid subscription key for the server. Please check your configuration and try again." | Write-Host -ForegroundColor Red 
+                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error retrieving a valid subscription key for the server. Please check your configuration and try again." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                            $objStatus.Status = "Failed"
+                            $objStatus.Details = "Error retrieving a valid subscription key for the server. Please check your configuration and try again."
+                            [void]$iLOPreparationStatus.Add($objStatus)
+                            continue
+                        }
+                
+                        # Generate a new activation key (valid for 24 hours)
+                        if ($SecureGateway) {
+                            $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -ExpirationInHours 24 -SecureGateway $SecureGateway -SubscriptionKey $SubscriptionKey -Verbose:$Verbose -ErrorAction Stop
+                        }
+                        else {
+                            $COMActivationKey = New-HPECOMServerActivationKey -Region $Region -ExpirationInHours 24 -SubscriptionKey $SubscriptionKey -Verbose:$Verbose -ErrorAction Stop
+                        }
+
+                        if ($COMActivationKey) {
+                            "`t`t - Status: " | Write-Host -NoNewline
+                            "Successfully generated COM {0} activation key '{1}' for region '{2}' for server model '{3}'." -f $keyType, $COMActivationKey, $Region, $objStatus.ProductName | Write-Host -ForegroundColor Green
+                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Successfully generated COM {7} activation key '{8}' for region '{9}'." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType, $COMActivationKey, $Region | Write-Verbose
+                        }
+                        else {
+                            "`t`t - Status: " | Write-Host -NoNewline
+                            "Error generating COM {0} activation key. Please check your configuration and try again." -f $keyType | Write-Host -ForegroundColor Red
+                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error generating COM {7} activation key. Please check your configuration and try again." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType | Write-Verbose
+                            $objStatus.Status = "Failed"
+                            $objStatus.Details = "Error generating COM {0} activation key. Please check your configuration and try again." -f $keyType
+                            [void]$iLOPreparationStatus.Add($objStatus)
+                            continue
+                        }
+                    }
                 }   
             }
             catch {
