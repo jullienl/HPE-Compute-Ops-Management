@@ -3,7 +3,13 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+July 11, 2025
+ - Improved reliability when retrieving iLO chassis information by adding retry logic. The script now attempts up to five times with a two-second delay between attempts, reducing failures due to transient iLO response issues.
+ - Enhanced post-onboarding validation: After onboarding, the script now checks that each server is present in the workspace and assigned to the COM instance, and verifies its subscription status. Any server not found or lacking a valid subscription is reported as a failure in the status report and removed from the COM instance.
+ - Updated DNS configuration logic: When DNS settings are managed via DHCP, the script now marks the status as "Skipped" instead of "Warning," reducing unnecessary warnings in the final report.
+ - Improved tagging logic: Tags are now only added if they are missing from the server, preventing redundant updates and improving onboarding performance.
 July 9, 2025
+ - Fixed issue where onboarding task was running even if iLO was already connected to COM. The script now checks the iLO connection status before attempting to onboard, preventing unnecessary operations and improving efficiency.
  - Added support for user-defined iLO credentials in the CSV file. Users can now specify different usernames and passwords for each iLO in the CSV file, allowing for greater flexibility in environments with varying iLO credentials.
  - Fixed a bug where the script could fail to connect to iLOs due to transient network issues or iLO unavailability. The script now retries the connection up to three times before failing, significantly improving robustness during onboarding.
  - Added logic to handle cases where the activation key may not be compatible with the server model being onboarded. The script now validates the compatibility of the subscription key assigned to the activation key with the server model before proceeding with onboarding.
@@ -30,15 +36,21 @@ June 4, 2025:
  - Security enhancements: The script verifies the authenticity and integrity of the HPEiLOCmdlets and HPECOMCmdlets modules before use (on Windows systems only) to ensure only trusted code is executed.
  - Changed the timing of COM activation key generation: The activation key is now generated just before onboarding each iLO, and its expiration time is set to 1 day (increased from the default 1 hour) to provide more flexibility and reduce the risk of key expiration during large onboarding operations.
 
-
 .DESCRIPTION
-This PowerShell script automates the process of connecting HPE Gen10 and later servers to HPE Compute Ops Management (COM).
-It also allows you to prepare and configure iLO settings, such as DNS, NTP, and firmware updates, before connecting the servers to COM. 
+This PowerShell script is designed to streamline the onboarding process of HPE Gen10 and later servers to HPE Compute Ops Management (COM) by automating the necessary preparations and configurations required for successful integration.
 
 This preparation is essential to ensure that iLOs are ready for COM and can effectively communicate and be managed by the platform, it includes:
 - Setting up DNS: To ensure iLO can reach the cloud platform
 - Setting up NTP: To ensure the date and time of iLO are correct
 - Updating iLO firmware: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, or iLO6 1.64 or later).
+
+This script is designed to be idempotent, meaning you can safely run it multiple times without causing issues or duplicating actions. Here’s how it works:
+
+- Parameter Skipping: The script checks each parameter or configuration before making changes. If a parameter is already set or a step has already been completed, the script skips that step. This prevents unnecessary updates or reconfiguration.
+- iLO Connection Check: Before attempting to connect an iLO to COM, the script verifies if the iLO is already connected. If it is, the script skips the reconnection process for that iLO, avoiding redundant operations.
+- Status Reporting: The script generates a detailed status report at the end of its execution, indicating which iLOs were successfully connected, which were skipped, and any warnings or issues encountered. This report helps you track the state of each iLO without needing to re-run the script unnecessarily.
+
+This approach ensures that running the script repeatedly will not disrupt existing configurations or connections. It only applies changes where needed, making it safe and efficient for ongoing management or troubleshooting.
 
 The script requires a CSV file and supports two options for iLO credentials:
 
@@ -50,6 +62,7 @@ The script requires a CSV file and supports two options for iLO credentials:
 Choose the CSV format that matches your environment.
 
 To see a demonstration of this script in action, watch the following video: https://youtu.be/ZV0bmqmODmU.
+Note: This video was recorded during the early development phase of the script. The script has since been significantly enhanced, and some features or outputs shown in the video may differ from the current version.
 
 The script performs the following actions:
 1. Connects to HPE GreenLake.
@@ -132,20 +145,29 @@ How to use:
     
     Update the following variables according to your environment:
 
-     - Path to the CSV file containing the list of iLO IP addresses or resolvable hostnames.
-     - Path to the iLO firmware flash files for iLO5 and iLO6.
-     - Username of the iLO account.
-     - DNS servers to configure in iLO (optional).
-     - SNTP servers to configure in iLO (optional).
-     - iLO Web Proxy or Secure Gateway settings (optional).
-        - Note: The Secure Gateway must be pre-configured in your COM instance before running this script.
+    - Required configuration:
+
+        `$iLOcsvPath` - Path to your CSV file containing the iLO details   
+        `$iLO5binFile` and `$iLO6binFile` - Path to the iLO firmware flash files for iLO5 and iLO6   
+        `$iLOUserName` - iLO administrator account username (only needed if missing from the CSV file)    
+        `$WorkspaceName` - Your HPE GreenLake workspace name where the COM instance is provisioned  
+        `$Region` - Your COM instance region  
+        `$HPEAccount` - Your HPE GreenLake account email with HPE GreenLake and COM administrative privileges  
+        `$OktaSSOEmail` - Set to $true if using @HPE.com email. Note that SSO is available for users with an hpe.com email address only   
+        `$SubscriptionTier` - Set to 'PROLIANT' or 'ALLETRA' based on your device type  
+        `$UseEval `- Set to $true to include evaluation subscriptions  
+
+    - Optional configuration:
+
+        `$DNSservers` and `$DNStypes` - DNS server configuration to configure in iLO
+        `$SNTPservers` - Time synchronization servers to configure in iLO
+        `$WebProxyServer`, `$WebProxyPort`, `$WebProxyUsername`, `$WebProxyPassword` - Web proxy settings to configure in iLO  
+        `$SecureGateway `- Secure Gateway FQDN (alternative to web proxy)  
+           - The Secure Gateway must be pre-configured in your COM instance before running this script.  
         - You cannot use both web proxy variables and Secure Gateway variables simultaneously.
-     - HPE GreenLake account with HPE GreenLake and COM administrative privileges.
-     - HPE GreenLake workspace name where the COM instance is provisioned.
-     - Region where the COM instance is provisioned.
-     - Location name where the devices will be assigned (optional).
-        - Note: The location must be created in the HPE GreenLake workspace before running this script.
-     - Tags to assign to devices (optional).
+        `$LocationName` - Location assignment for devices  
+           - The location must be created in the HPE GreenLake workspace before running this script.
+        `$Tags` - Custom tags to assign to devices   
 
     All these variables are clearly marked and documented in the "Variables definition" section for easy customization.
 
@@ -240,7 +262,11 @@ Output:
                     - Current: 3.1
                     - Required: 3.09 or later
             - iLO connection to COM: Connected
-                    - Status: iLO already connected to COM.
+                    - Status: iLO is connected to COM.
+            - Instance and subscription assignments:
+                    - Status: Device found in the workspace.                                                               
+                    - Status: Device is assigned to the 'eu-central' Compute Ops Management service.
+                    - Status: Device has a valid subscription for Compute Ops Management.
             - Tags: Warning
                     - Current: None                                                                                        
                     - Missing: Country=FR, App=AI, Department=IT
@@ -261,6 +287,7 @@ Output:
                     - Current: 1.62
                     - Required: 1.64 or later
             - iLO connection to COM: Disconnected
+                    - Status: iLO not connected to COM. Current status: NotEnabled
             - Tags: Warning
                     - Current: Country=FR                                                                                        
                     - Missing: Department=IT, App=AI
@@ -409,10 +436,8 @@ Note: The script generates a CSV file with the status of the operation, includin
 
 Disclaimer: The script is provided as-is and is not officially supported by HPE. It is recommended to test the script in a non-production environment before running it in a production environment. Use the script at your own risk.
 
-
-
   Author: lionel.jullien@hpe.com
-  Date:   Feb 2025
+  Date:   July 2025
   Script source: https://github.com/jullienl/HPE-Compute-Ops-Management/blob/main/PowerShell/Onboarding/Prepare-and-Connect-iLOs-to-COM-v2.ps1
     
 #################################################################################
@@ -479,39 +504,12 @@ $iLOUserName = "administrator"
 
 # HPE GreenLake workspace configuration
 # Update these values to match your HPE GreenLake environment
-$WorkspaceName = "HPE"                       # HPE GreenLake workspace name
-$Region = "eu-central"                       # COM instance region (us-west, eu-central, ap-northeast, etc.)
-
-# ========================================================================================================
-# OPTIONAL CONFIGURATION - Comment out or modify as needed
-# ========================================================================================================
-
-# DNS servers to configure in iLO (optional)
-# Uncomment and modify to configure DNS servers in iLO
-# Note: DNS configuration helps ensure iLOs can reach the HPE GreenLake cloud platform
-$DNSservers = , @("192.168.2.1", "192.168.2.3")
-$DNStypes = , @("Primary", "Secondary")
-
-# SNTP servers to configure in iLO (optional)
-# Uncomment and modify to configure SNTP servers in iLO
-# Note: Accurate time synchronization is crucial for secure mTLS connections between COM and iLO
-$SNTPservers = , @("1.1.1.1", "2.2.2.2")
-
-# ========================================================================================================
-# NETWORK CONNECTIVITY OPTIONS - Use either Web Proxy OR Secure Gateway, not both
-# ========================================================================================================
-
-# Option 1: iLO Web Proxy settings (optional)
-# Uncomment and configure if your iLOs require a web proxy to reach the internet
-# $WebProxyServer = "web-proxy.domain.com"
-# $WebProxyPort = "8088"
-# $WebProxyUsername = "myproxyuser"
-# $WebProxyPassword = (Read-Host -AsSecureString "Enter password for proxy account '$WebProxyUsername'")
-
-# Option 2: Secure Gateway FQDN (optional)
-# Uncomment and configure if using HPE Secure Gateway for COM connectivity
-# Note: The Secure Gateway must be pre-configured in your COM instance before running this script
-# $SecureGateway = "sg01.domain.lab"
+# Note: The workspace must already exist in your HPE GreenLake account.
+$WorkspaceName = "My_Workspace"                # HPE GreenLake workspace name
+# Name of the provisioned Compute Ops Management (COM) service instance in your workspace.
+# IMPORTANT: Your HPE GreenLake workspace must already have a Compute Ops Management (COM) service instance provisioned.
+# If you are unsure, log in to HPE GreenLake and verify the COM service instance is present in your workspace.
+$Region = "eu-central"                         # COM instance region (us-west, eu-central, ap-northeast, etc.)
 
 # ========================================================================================================
 # HPE GREENLAKE AUTHENTICATION CONFIGURATION
@@ -520,11 +518,11 @@ $SNTPservers = , @("1.1.1.1", "2.2.2.2")
 # HPE GreenLake account with appropriate administrative privileges
 # Required roles: Workspace Administrator/Operator + COM Administrator/Operator
 
-# Option 1: Standard HPE GreenLake account (non-SAML)
+# Option 1: Standard HPE GreenLake account 
 $HPEAccount = "email@domain.com"
 $OktaSSOEmail = $false 
 
-# Option 2: SAML/OKTA SSO account
+# Option 2: SAML/OKTA SSO account. SSO is available for users with an hpe.com email address only.
 # Uncomment the following lines and comment out the lines above if using SAML SSO
 # $HPEAccount = "firstname.lastname@hpe.com"
 # $OktaSSOEmail = $true 
@@ -547,20 +545,53 @@ $SubscriptionTier = "PROLIANT"   # Use 'PROLIANT' for ProLiant servers, 'ALLETRA
 $UseEval = $False                # Set to $True to include evaluation subscriptions, $False to exclude them
 
 # ========================================================================================================
-# DEVICE ASSIGNMENT CONFIGURATION (Optional)
+# OPTIONAL CONFIGURATION - Comment out or modify as needed 
 # ========================================================================================================
 
-# Location assignment (optional but recommended)
-# Required for automated HPE support case creation and services
-# Note: The location must exist in your HPE GreenLake workspace before running this script
-# Comment out the following line to skip location assignment
+# DNS servers to configure in iLO (optional)
+# Uncomment and modify to configure DNS servers in iLO
+# Note: DNS configuration helps ensure iLOs can reach the HPE GreenLake cloud platform
+$DNSservers = , @("192.168.2.1", "192.168.2.3")
+$DNStypes = , @("Primary", "Secondary")
+
+# SNTP servers to configure in iLO (optional)
+# Uncomment and modify to configure SNTP servers in iLO
+# Note: Accurate time synchronization is crucial for secure mTLS connections between COM and iLO
+$SNTPservers = , @("1.1.1.1", "2.2.2.2")
+
+# Location assignment (optional but highly recommended)
+# Assigning a location to each device enables automated HPE support case creation and service delivery.
+# The location must already exist in your HPE GreenLake workspace before running this script.
+# To skip location assignment, comment out the following line.
 $LocationName = "Mougins"
 
 # Device tags (optional)
-# Assign custom tags to help organize and categorize your servers
+# Assign custom tags to organize and categorize your servers.
+# Tags are required to enable Resource Restriction Policy in HPE GreenLake.
 # Tags must be defined as a comma-separated string (e.g., "Environment=Production, Department=IT, Owner=TeamA")
 # Comment out the following line to skip tag assignment
 $Tags = "Country=FR, App=AI, Department=IT"
+
+
+# ========================================================================================================
+# NETWORK CONNECTIVITY OPTIONS - Use either Web Proxy OR Secure Gateway, not both
+# ========================================================================================================
+
+# Option 0: No iLO Web Proxy and no Secure Gateway
+# This is the default option. iLOs will connect directly to COM without a proxy or secure gateway.
+
+# Option 1: iLO Web Proxy settings (optional)
+# Uncomment and configure if your iLOs require a web proxy to reach the internet
+# $WebProxyServer = "web-proxy.domain.com"
+# $WebProxyPort = "8088"
+# $WebProxyUsername = "myproxyuser"
+# $WebProxyPassword = (Read-Host -AsSecureString "Enter password for proxy account '$WebProxyUsername'")
+
+# Option 2: Secure Gateway FQDN (optional)
+# Uncomment and configure if using HPE Secure Gateway for COM connectivity
+# Note: The Secure Gateway must be pre-configured in your COM instance before running this script
+# $SecureGateway = "sg01.domain.lab"
+
 
 #EndRegion
 
@@ -1233,6 +1264,10 @@ ForEach ($iLO in $iLOs) {
         AddCOMSubscriptionDetails      = $Null
         iLOConnectionStatus            = $Null
         iLOConnectionDetails           = $Null
+        ServiceAssignmentStatus        = $Null
+        ServiceAssignmentDetails       = $Null
+        SubscriptionAssignmentStatus   = $Null
+        SubscriptionAssignmentDetails  = $Null
         TagsAssignmentStatus           = $Null
         TagsAssignmentDetails          = $Null
         LocationAssignmentStatus       = $Null
@@ -1335,7 +1370,33 @@ ForEach ($iLO in $iLOs) {
 
         $objStatus.ServerSystemROM = $iLOConnection.TargetInfo.SystemROM.Split(" ")[0..1] -join " "
 
-        $iLOChassisInfo = Get-HPEiLOChassisInfo -Connection $iLOConnection -Verbose:$Verbose -ErrorAction Stop
+        # Add retry loop for Get-HPEiLOChassisInfo
+        $iLOChassisInfo = $null
+        $maxRetries = 5
+        $retryCount = 0
+        while ($retryCount -lt $maxRetries) {
+            try {
+                $iLOChassisInfo = Get-HPEiLOChassisInfo -Connection $iLOConnection -Verbose:$Verbose -ErrorAction Stop
+                if ($iLOChassisInfo) { break }
+            }
+            catch {
+                Start-Sleep -Seconds 2
+                $retryCount++               
+            }
+        }
+        
+        if (-not $iLOChassisInfo) {
+            "`n  - [{0}]" -f $iLO.IP | Write-Host
+            "`t - Retrieving iLO chassis info: " | Write-Host -NoNewline
+            "Failed" | Write-Host -f Red
+            "`t`t - Status: " | Write-Host -NoNewline	
+            "Error retrieving iLO chassis info after multiple attempts. Please verify iLO connectivity." | Write-Host -f Red
+            $objStatus.Status = "Failed"
+            $objStatus.Details = "Error retrieving iLO chassis info. Please verify iLO connectivity."
+            [void]$iLOPreparationStatus.Add($objStatus)
+            continue
+        }
+
         $objStatus.SerialNumber = $iLOChassisInfo | Select-Object -ExpandProperty SerialNumber
         $objStatus.PartNumber = $iLOChassisInfo | Select-Object -ExpandProperty SKU
 
@@ -1582,12 +1643,12 @@ ForEach ($iLO in $iLOs) {
             }
                         
             if ($DHCPv4DNSServer -eq "Enabled") {
-                "Warning" | Write-Host -f Yellow
+                "Skipped" | Write-Host -f Yellow
                 "`t`t - Status: " | Write-Host -NoNewline
-                "DNS settings cannot be configured because they are currently managed via DHCP. Skipping DNS configuration..." | Write-Host -ForegroundColor Yellow
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - DNS settings cannot be configured because they are currently managed via DHCP. Skipping DNS configuration..." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.DNSSettingsStatus = "Warning"
-                $objStatus.DNSSettingsDetails = "DNS settings cannot be configured because they are currently managed via DHCP. Skipping DNS configuration..."
+                "DNS settings are currently managed via DHCP. Skipping manual DNS configuration..." | Write-Host -ForegroundColor Green
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - DNS settings are currently managed via DHCP. Skipping manual DNS configuration..." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                $objStatus.DNSSettingsStatus = "Skipped"
+                $objStatus.DNSSettingsDetails = "DNS settings are currently managed via DHCP. Skipping manual DNS configuration..."
                 
             }
             # If DHCPv4DNSServer is not enabled, set the DNS servers
@@ -2852,10 +2913,10 @@ ForEach ($iLO in $iLOs) {
             elseif ($iLOCOMOnboardingStatus.CloudConnectStatus -eq "Connected") {
                 "Connected" | Write-Host -f Green
                 "`t`t - Status: " | Write-Host -NoNewline
-                "iLO already connected to COM." | Write-Host -ForegroundColor Green
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO already connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                "iLO is connected to COM." | Write-Host -ForegroundColor Green
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO is connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
                 $objStatus.iLOConnectionStatus = "Success"
-                $objStatus.iLOConnectionDetails = "iLO already connected to COM."
+                $objStatus.iLOConnectionDetails = "iLO is connected to COM."
             }
             else {
                 "Disconnected" | Write-Host -f Yellow
@@ -3306,38 +3367,38 @@ ForEach ($iLO in $iLOs) {
                     $objStatus.Status = "Failed"
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
-                }
+                }                
+            }
 
-                # Check the iLO connection status to COM
+            # Check the iLO connection status to COM
 
-                if ($OnboardingStatus.Status -eq "Failed" -or $OnboardingStatus.Status -eq "Warning") {
-                    # Handle failed/warning status
-                    "`t`t - Status: " | Write-Host -NoNewline
-                    "Error connecting iLO to COM. Status: {0} - Details: {1}" -f $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Host -ForegroundColor Red
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Status: {7} - Details: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Verbose
-                    $objStatus.iLOConnectionStatus = $OnboardingStatus.Status
-                    $objStatus.iLOConnectionDetails = $OnboardingStatus.iLOConnectionDetails
-                    $objStatus.Status = $OnboardingStatus.Status
-                    $objStatus.Details = $OnboardingStatus.Details
-                    [void]$iLOPreparationStatus.Add($objStatus)
-                    continue
-                }
-                elseif ($OnboardingStatus.iLOConnectionDetails -match "iLO is already connected to the Compute Ops Management instance!") {
-                    # Handle already connected
-                    "`t`t - Status: " | Write-Host -NoNewline
-                    "iLO is already connected to COM." | Write-Host -ForegroundColor Green
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO is already connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                    $objStatus.iLOConnectionStatus = "Success"
-                    $objStatus.iLOConnectionDetails = "iLO is already connected to the Compute Ops Management instance."
-                }
-                else {
-                    # Handle successful new connection
-                    "`t`t - Status: " | Write-Host -NoNewline
-                    "iLO successfully connected to COM." | Write-Host -ForegroundColor Green
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO successfully connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                    $objStatus.iLOConnectionStatus = "Success"
-                    $objStatus.iLOConnectionDetails = "iLO successfully connected to the Compute Ops Management instance."
-                }
+            if ($OnboardingStatus.Status -eq "Failed" -or $OnboardingStatus.Status -eq "Warning") {
+                # Handle failed/warning status
+                "`t`t - Status: " | Write-Host -NoNewline
+                "Error connecting iLO to COM. Status: {0} - Details: {1}" -f $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Host -ForegroundColor Red
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error connecting iLO to COM - Status: {7} - Details: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $OnboardingStatus.Status, $OnboardingStatus.iLOConnectionDetails | Write-Verbose
+                $objStatus.iLOConnectionStatus = $OnboardingStatus.Status
+                $objStatus.iLOConnectionDetails = $OnboardingStatus.iLOConnectionDetails
+                $objStatus.Status = $OnboardingStatus.Status
+                $objStatus.Details = $OnboardingStatus.Details
+                [void]$iLOPreparationStatus.Add($objStatus)
+                continue
+            }
+            elseif ($OnboardingStatus.iLOConnectionDetails -match "iLO is already connected to the Compute Ops Management instance!") {
+                # Handle already connected
+                "`t`t - Status: " | Write-Host -NoNewline
+                "iLO is already connected to COM." | Write-Host -ForegroundColor Green
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO is already connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                $objStatus.iLOConnectionStatus = "Success"
+                $objStatus.iLOConnectionDetails = "iLO is already connected to the Compute Ops Management instance."
+            }
+            else {
+                # Handle successful new connection
+                "`t`t - Status: " | Write-Host -NoNewline
+                "iLO successfully connected to COM." | Write-Host -ForegroundColor Green
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO successfully connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                $objStatus.iLOConnectionStatus = "Success"
+                $objStatus.iLOConnectionDetails = "iLO successfully connected to the Compute Ops Management instance."
             }          
         }
         
@@ -3347,398 +3408,515 @@ ForEach ($iLO in $iLOs) {
         
     #EndRegion
 
-    #Region Check tags assigned to the device
+    #Region Check instance and subscription assignments   
         
-    if ($Check) {
+    $Devicefound = $Null
 
-        if ($Tags) {
+    "`t - Instance and subscription assignments: " | Write-Host 
 
-            "`t - Tags: " | Write-Host -NoNewline
-
-            $CurrentDeviceTags = $Null
-            $Devicefound = $Null
-
-            # Check if the device exists in the workspace
-            try {
-                $Devicefound = Get-HPEGLDevice -SerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
+    # Check if the device exists in the workspace
+    try {
+        $Devicefound = Get-HPEGLDevice -SerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
       
-                if (-not $Devicefound) {    
-                    "Warning" | Write-Host -f Yellow
-                    "`t`t - Current: " | Write-Host -NoNewline
-                    "None" | Write-Host -ForegroundColor Yellow
-                    "`t`t - Missing: " | Write-Host -NoNewline
-                    $Tags | Write-Host -f Yellow
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags will be configured after the device is connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                    $objStatus.TagsAssignmentStatus = "Warning"
-                    $objStatus.TagsAssignmentDetails = "Tags will be configured after the device is connected to COM."
+        if (-not $Devicefound) {    
+            "`t`t - Status: " | Write-Host -NoNewline
+            if ($Check) {
+                "Device cannot be found in the workspace. " | Write-Host -ForegroundColor Red
+                $objStatus.Details = "Device cannot be found in the workspace."
+            }
+            else {
+                "Device cannot be found in the workspace. Please check your configuration and run the script again." | Write-Host -ForegroundColor Red
+                $objStatus.Details = "Device cannot be found in the workspace. Please check your configuration and run the script again."
+
+            }
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device cannot be found in the workspace." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+            $objStatus.Status = "Failed"
+        }
+        else {
+            "`t`t - Status: " | Write-Host -NoNewline
+            "Device found in the workspace." | Write-Host -ForegroundColor Green
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device found in the workspace." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                
+            # Check if the device is assigned to the Compute Ops Management service
+            if ($Devicefound.application_instance_id -and $Devicefound.application_instance_id -eq $COMInstance.application_instance_id) {
+                "`t`t - Status: " | Write-Host -NoNewline
+                "Device is assigned to the '{0}' Compute Ops Management service." -f $Region | Write-Host -ForegroundColor Green
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device is assigned to the '{7}' Compute Ops Management service." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Region | Write-Verbose
+                $objStatus.ServiceAssignmentStatus = "Success"
+                $objStatus.ServiceAssignmentDetails = "Device is assigned to the '{0}' Compute Ops Management service." -f $Region
+
+                # Check if the device has a valid subscription for Compute Ops Management
+                if ($Devicefound.subscription_tier) {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Device has a valid subscription for Compute Ops Management." | Write-Host -ForegroundColor Green
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device has a valid subscription for Compute Ops Management." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                    $objStatus.SubscriptionAssignmentStatus = "Success"
+                    $objStatus.SubscriptionAssignmentDetails = "Device has a valid subscription for Compute Ops Management."
+                }
+                else {                        
+                    if ($Check) {
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "Device does not have a subscription for Compute Ops Management." | Write-Host -ForegroundColor Red
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device does not have a subscription for Compute Ops Management." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                        $objStatus.SubscriptionAssignmentStatus = "Failed"
+                        $objStatus.SubscriptionAssignmentDetails = "Device does not have a subscription for Compute Ops Management."
+                    }
+                    # If no subscription is allocated, we can consider it as a failure and remove the device from the service assignment
+                    # no subscription is allocated, that the script remove the server from the region. Then return an error no valid subscription found.
+                    else {
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "No valid subscription found. Please verify that the subscription tier specified in the script variables matches the server hardware type (e.g., ProLiant or Alletra)." | Write-Host -ForegroundColor Red
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - No valid subscription found. Please verify that the subscription tier specified in the script variables matches the server hardware type (e.g., ProLiant or Alletra)." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                        $objStatus.SubscriptionAssignmentStatus = "Failed"
+                        $objStatus.SubscriptionAssignmentDetails = "No valid subscription found. Please verify that the subscription tier specified in the script variables matches the server hardware type (e.g., ProLiant or Alletra)."
+                                
+                        # Remove the device from the Compute Ops Management service instance
+                        try {
+                            $RemoveComputeFromCOMInstance = Remove-HPEGLDeviceFromService -DeviceSerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
+                                    
+                            if ($RemoveComputeFromCOMInstance.status -eq "Failed") {
+                                "`t`t`t - Status: " | Write-Host -NoNewline
+                                "Error removing device from Compute Ops Management service instance. Error: {0}" -f $RemoveComputeFromCOMInstance.details | Write-Host -ForegroundColor Red
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing device from Compute Ops Management service instance. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $RemoveComputeFromCOMInstance.details | Write-Verbose
+                                $objStatus.Status = "Failed"
+                                $objStatus.Details = "No valid subscription found. Failed to remove device from Compute Ops Management service instance. Error details: {0}" -f $RemoveComputeFromCOMInstance.details
+                            }
+                            else {
+                                "`t`t`t - Status: " | Write-Host -NoNewline
+                                "Device removed from Compute Ops Management service instance because no valid subscription was found." | Write-Host -ForegroundColor Green
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device removed from Compute Ops Management service instance because no valid subscription was found." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                                $objStatus.Status = "Failed"
+                                $objStatus.Details = "Device removed from Compute Ops Management service instance because no valid subscription was found."
+                            }
+                        }
+                        catch {
+                            "`t`t`t - Status: " | Write-Host -NoNewline
+                            "No valid subscription found. Error removing device from Compute Ops Management service instance." | Write-Host -ForegroundColor Red
+                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing device from Compute Ops Management service instance. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                            $objStatus.Status = "Failed"
+                            $objStatus.Details = "No valid subscription found. Error removing device from Compute Ops Management service instance. Error: $($_)"
+                        }
+                    }
+                }
+            }
+            else {
+                "`t`t - Status: " | Write-Host -NoNewline
+
+                if ($Check) {
+                    "Device is not assigned to the '{0}' Compute Ops Management service." -f $Region | Write-Host -ForegroundColor Red
+                    $objStatus.ServiceAssignmentDetails = "Device is not assigned to the '{0}' Compute Ops Management service." -f $Region
+
                 }
                 else {
-    
-                    $CurrentDeviceTags = $Devicefound | Select-Object -ExpandProperty Tags
-
-                    if ($CurrentDeviceTags.Count -gt 0) {
-
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $CurrentDeviceTags.Count | Write-Verbose
-
-                        # Transform $Tags defined in the script into a PSCustomObject for comparison
-                        $TagsArray = $Tags -split ", "
-                        $TagsHashtable = @{}
-
-                        foreach ($Tag in $TagsArray) {
-                            $key, $value = $Tag -split "="
-                            $TagsHashtable[$key] = $value
-                        }
-
-                        $TagsObject = [PSCustomObject]$TagsHashtable
-
-                        # Transform $CurrentDeviceTags into a PSCustomObject for comparison
-                        $CurrentDeviceTagsHashtable = @{}
-
-                        foreach ($CurrentDeviceTag in $CurrentDeviceTags) {
-                            $CurrentDeviceTagsHashtable[$CurrentDeviceTag.Name] = $CurrentDeviceTag.Value
-                        }
-
-                        $CurrentDeviceTagsObject = [PSCustomObject]$CurrentDeviceTagsHashtable
-
-        
-                        # Initialize arrays to store missing and extra tags
-                        $missingTags = @{}
-                        $extraTags = @{}
-
-                        # Check for missing tags (present in $TagsObject but not in $CurrentDeviceTagsObject)
-                        foreach ($property in $TagsObject.PSObject.Properties) {
-                            if (-not $CurrentDeviceTagsObject.PSObject.Properties[$property.Name] -or $CurrentDeviceTagsObject.PSObject.Properties[$property.Name].Value -ne $property.Value) {
-                                $missingTags[$property.Name] = $property.Value
-                            }
-                        }
-
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Missing tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, ($missingTags | Out-String ) | Write-Verbose
-
-                        # Check for extra tags (present in $CurrentDeviceTagsObject but not in $TagsObject)
-                        foreach ($property in $CurrentDeviceTagsObject.PSObject.Properties) {
-                            if (-not $TagsObject.PSObject.Properties[$property.Name] -or $TagsObject.PSObject.Properties[$property.Name].Value -ne $property.Value) {
-                                $extraTags[$property.Name] = $property.Value
-                            }
-                        }
-
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Extra tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, ($extraTags | Out-String ) | Write-Verbose
-
-                        # Format the missing tags
-        
-                        $MissingTagsList = [System.Collections.ArrayList]::new()
-        
-                        foreach ($tag in $missingTags.GetEnumerator()) { 
-                            [void]$MissingTagsList.add("$($tag.Key)=$($tag.Value)")
-                        }
-        
-                        if ($MissingTagsList.Count -gt 1) {
-                            $FormattedMissingTags = $MissingTagsList -join ", "
-                        }
-                        elseif ($MissingTagsList.Count -eq 1) {
-                            $FormattedMissingTags = $MissingTagsList[0]
-                        }
-                        else {
-                            $FormattedMissingTags = ""
-                        }
-
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Formatted missing tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedMissingTags | Write-Verbose
-
-                        # Format the extra tags
-        
-                        $ExtraTagsList = [System.Collections.ArrayList]::new()
-        
-                        foreach ($tag in $extraTags.GetEnumerator()) { 
-                            [void]$ExtraTagsList.add("$($tag.Key)=$($tag.Value)")
-                        }
-
-                        if ($ExtraTagsList.Count -gt 1) {
-                            $FormattedExtraTags = $ExtraTagsList -join ", "
-                        }
-                        elseif ($ExtraTagsList.Count -eq 1) {
-                            $FormattedExtraTags = $ExtraTagsList[0]
-                        }
-                        else {
-                            $FormattedExtraTags = ""
-                        }
-
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Formatted extra tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTags | Write-Verbose
-
-                        # Format the tags assigned to the device
-
-                        $CurrentDeviceTagsList = [System.Collections.ArrayList]::new()
-        
-                        foreach ($tag in $CurrentDeviceTags) { 
-                            [void]$CurrentDeviceTagsList.add("$($tag.Name)=$($tag.Value)")
-                        }
-            
-                        if ($CurrentDeviceTagsList.Count -gt 1) {
-                            $FormattedCurrentTags = $CurrentDeviceTagsList -join ", "
-                        }
-                        elseif ($CurrentDeviceTagsList.Count -eq 1) {
-                            $FormattedCurrentTags = $CurrentDeviceTagsList[0]
-                        }
-                        else {
-                            $FormattedCurrentTags = ""
-                        }
-
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Formatted currently assigned tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedCurrentTags | Write-Verbose           
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Missing tags: {7} - Extra tags: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $MissingTagsList.count, $ExtraTagsList.count | Write-Verbose
-
-                        if ($MissingTagsList.Count -gt 0 -or $ExtraTagsList.Count -gt 0) {
-
-                            if ($MissingTagsList.Count -gt 0 -and $ExtraTagsList.Count -eq 0) {            
-                                "Warning" | Write-Host -f Yellow               
-                                "`t`t - Current: {0}" -f $FormattedCurrentTags | Write-Host
-                                "`t`t - Missing: " | Write-Host -NoNewline
-                                Write-Host $FormattedMissingTags -f Yellow
-                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Missing: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedMissingTags | Write-Verbose
-                                $objStatus.TagsAssignmentStatus = "Warning"
-                                $objStatus.TagsAssignmentDetails = "Missing tags: $($FormattedMissingTags)"
-
-                            }
-                            elseif ($ExtraTagsList.Count -gt 0 -and $MissingTagsList.Count -eq 0) {
-                                "Warning" | Write-Host -f Yellow               
-                                "`t`t - Current: {0}" -f $FormattedCurrentTags | Write-Host
-                                "`t`t - Extra: " | Write-Host -NoNewline
-                                Write-Host $FormattedExtraTags -f Yellow
-                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Extra: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTags | Write-Verbose
-                                $objStatus.TagsAssignmentStatus = "Warning"
-                                $objStatus.TagsAssignmentDetails = "Extra tags: $($FormattedExtraTags)"
-                            }
-                            elseif ($MissingTagsList.Count -gt 0 -and $ExtraTagsList.Count -gt 0) {
-                                "Warning" | Write-Host -f Yellow               
-                                "`t`t - Current: {0}" -f $FormattedCurrentTags | Write-Host
-                                "`t`t - Extra: " | Write-Host -NoNewline
-                                Write-Host $FormattedExtraTags -f Yellow
-                                "`t`t - Missing: " | Write-Host -NoNewline
-                                Write-Host $FormattedMissingTags -f Yellow
-                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Missing: {7} - Extra: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedMissingTags, $FormattedExtraTags | Write-Verbose
-                                $objStatus.TagsAssignmentStatus = "Warning"
-                                $objStatus.TagsAssignmentDetails = "Missing tags: $($FormattedMissingTags) - Extra tags: $($FormattedExtraTags)"
-                            }
-                        }
-                        else {
-                            "OK" | Write-Host -f Green
-                            "`t`t - Current: {0}" -f $FormattedCurrentTags | Write-Host
-                            "`t`t - Missing: " | Write-Host -NoNewline
-                            "None" | Write-Host -ForegroundColor Green
-                            "`t`t - Extra: " | Write-Host -NoNewline
-                            "None" | Write-Host -ForegroundColor Green
-                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags configuration is not required as tags are already defined!" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                            $objStatus.TagsAssignmentStatus = "Success"
-                            $objStatus.TagsAssignmentDetails = "Tags configuration is not required as tags are already defined!"
-                        }
-                
-                    }
-                    else {
-                        "Warning" | Write-Host -f Yellow
-                        "`t`t - Current: " | Write-Host -NoNewline
-                        "None" | Write-Host -ForegroundColor Yellow
-                        "`t`t - Missing: " | Write-Host -NoNewline
-                        $Tags | Write-Host -f Yellow
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags configuration is required as no tags are currently defined!" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.TagsAssignmentStatus = "Warning"
-                        $objStatus.TagsAssignmentDetails = "Tags configuration is required as no tags are currently defined!"
-                    }                    
+                    "Device is not assigned to the '{0}' Compute Ops Management service. Please ensure the device's serial number and part number are correct and correspond to the actual device." -f $Region | Write-Host -ForegroundColor Red
+                    $objStatus.ServiceAssignmentDetails = "Device is not assigned to the '{0}' Compute Ops Management service. Please ensure the device's serial number and part number are correct and correspond to the actual device." -f $Region
                 }
-            }
-            catch {
-                "Failed" | Write-Host -f Red
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Error retrieving device details in the workspace. Error: $_" | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve device details in the workspace. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.TagsAssignmentStatus = "Failed"
-                $objStatus.TagsAssignmentDetails = "Error retrieving device details. Error: $($_)"
-  
-            }
+
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device is not assigned to the '{7}' Compute Ops Management service." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Region | Write-Verbose
+                $objStatus.ServiceAssignmentStatus = "Failed"
+                $objStatus.Status = "Failed"
+                $objStatus.Details = $objStatus.ServiceAssignmentDetails
+            }   
         }
     }
+    catch {
+        "`t`t - Status: " | Write-Host -NoNewline
+        "Error checking instance and subscription assignments." | Write-Host -ForegroundColor Red
+        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error checking instance and subscription assignments - Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+        $objStatus.Status = "Failed"
+        $objStatus.Details = "Error checking instance and subscription assignments. Error: $($_)"
+    }
+    
     #EndRegion
 
-    #Region Add tags to the device (if any)
-
-    if (-not $Check -and $Tags) {
+    #Region Check and configure tags assigned to the device
+        
+    if ($Tags -and $Devicefound) {
 
         "`t - Tags: " | Write-Host -NoNewline
 
-        Try {
+        $CurrentDeviceTags = $Null
             
-            $Devicefound = Get-HPEGLDevice -SerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
+        # Check if the device exists in the workspace
+        $CurrentDeviceTags = $Devicefound | Select-Object -ExpandProperty Tags
+
+        if ($CurrentDeviceTags.Count -gt 0) {
+
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $CurrentDeviceTags.Count | Write-Verbose
+
+            # Transform $Tags defined in the script into a PSCustomObject for comparison
+            $TagsArray = $Tags -split ", "
+            $TagsHashtable = @{}
+
+            foreach ($Tag in $TagsArray) {
+                $key, $value = $Tag -split "="
+                $TagsHashtable[$key] = $value
+            }
+
+            $TagsObject = [PSCustomObject]$TagsHashtable
+
+            # Transform $CurrentDeviceTags into a PSCustomObject for comparison
+            $CurrentDeviceTagsHashtable = @{}
+
+            foreach ($CurrentDeviceTag in $CurrentDeviceTags) {
+                $CurrentDeviceTagsHashtable[$CurrentDeviceTag.Name] = $CurrentDeviceTag.Value
+            }
+
+            $CurrentDeviceTagsObject = [PSCustomObject]$CurrentDeviceTagsHashtable
+
         
-            if (-not $Devicefound) {    
-                "Failed" | Write-Host -f Yellow
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Device not found in the workspace." | Write-Host -ForegroundColor Yellow
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device not found in the workspace." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                $objStatus.TagsAssignmentStatus = "Failed"
-                $objStatus.TagsAssignmentDetails = "Device not found in the workspace."
-                $objStatus.Status = "Failed"
-                [void]$iLOPreparationStatus.Add($objStatus)
-                continue
+            # Initialize arrays to store missing and extra tags
+            $missingTags = @{}
+            $extraTags = @{}
+
+            # Check for missing tags (present in $TagsObject but not in $CurrentDeviceTagsObject)
+            foreach ($property in $TagsObject.PSObject.Properties) {
+                if (-not $CurrentDeviceTagsObject.PSObject.Properties[$property.Name] -or $CurrentDeviceTagsObject.PSObject.Properties[$property.Name].Value -ne $property.Value) {
+                    $missingTags[$property.Name] = $property.Value
+                }
+            }
+
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Missing tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, ($missingTags | Out-String ) | Write-Verbose
+
+            # Check for extra tags (present in $CurrentDeviceTagsObject but not in $TagsObject)
+            foreach ($property in $CurrentDeviceTagsObject.PSObject.Properties) {
+                if (-not $TagsObject.PSObject.Properties[$property.Name] -or $TagsObject.PSObject.Properties[$property.Name].Value -ne $property.Value) {
+                    $extraTags[$property.Name] = $property.Value
+                }
+            }
+
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Extra tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, ($extraTags | Out-String ) | Write-Verbose
+
+            # Format the missing tags
+        
+            $MissingTagsList = [System.Collections.ArrayList]::new()
+        
+            foreach ($tag in $missingTags.GetEnumerator()) { 
+                [void]$MissingTagsList.add("$($tag.Key)=$($tag.Value)")
+            }
+        
+            if ($MissingTagsList.Count -gt 1) {
+                $FormattedMissingTags = $MissingTagsList -join ", "
+                
+            }
+            elseif ($MissingTagsList.Count -eq 1) {
+                $FormattedMissingTags = $MissingTagsList[0]
             }
             else {
-    
-                $DeviceTags = $Devicefound | Select-Object -ExpandProperty Tags
-    
-                # Remove existing tags (if any)
-                if ($DeviceTags.Count -gt 0) {
-    
-                    # Initialize an empty string to store the formatted tags
-                    $ExistingtagsList = [System.Collections.ArrayList]::new()
-    
-                    foreach ($tag in $DeviceTags) { 
-                        [void]$ExistingtagsList.add("$($tag.Name)=$($tag.Value)")
-                    }
+                $FormattedMissingTags = ""
+            }
+
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Formatted missing tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedMissingTags | Write-Verbose
+
+            # Format the extra tags
+        
+            $ExtraTagsList = [System.Collections.ArrayList]::new()
+            $ExtraTagsListWithoutValue = [System.Collections.ArrayList]::new()
+        
+            foreach ($tag in $extraTags.GetEnumerator()) { 
+                [void]$ExtraTagsList.add("$($tag.Key)=$($tag.Value)")
+                [void]$ExtraTagsListWithoutValue.add("$($tag.Key)")
+            }
+
+            if ($ExtraTagsList.Count -gt 1) {
+                $FormattedExtraTags = $ExtraTagsList -join ", "
+                $FormattedExtraTagsWithoutValue = $ExtraTagsListWithoutValue -join ", "
+            }
+            elseif ($ExtraTagsList.Count -eq 1) {
+                $FormattedExtraTags = $ExtraTagsList[0]
+                $FormattedExtraTagsWithoutValue = $ExtraTagsListWithoutValue[0]
+            }
+            else {
+                $FormattedExtraTags = ""
+                $FormattedExtraTagsWithoutValue = ""
+            }
+
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Formatted extra tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTags | Write-Verbose
+
+            # Format the tags assigned to the device
+
+            $CurrentDeviceTagsList = [System.Collections.ArrayList]::new()
+        
+            foreach ($tag in $CurrentDeviceTags) { 
+                [void]$CurrentDeviceTagsList.add("$($tag.Name)=$($tag.Value)")
+            }
+            
+            if ($CurrentDeviceTagsList.Count -gt 1) {
+                $FormattedCurrentTags = $CurrentDeviceTagsList -join ", "
+            }
+            elseif ($CurrentDeviceTagsList.Count -eq 1) {
+                $FormattedCurrentTags = $CurrentDeviceTagsList[0]
+            }
+            else {
+                $FormattedCurrentTags = ""
+            }
+
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Formatted currently assigned tags found: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedCurrentTags | Write-Verbose           
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Missing tags: {7} - Extra tags: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $MissingTagsList.count, $ExtraTagsList.count | Write-Verbose
+
+            if ($MissingTagsList.Count -gt 0 -or $ExtraTagsList.Count -gt 0) {
+
+                if ($MissingTagsList.Count -gt 0 -and $ExtraTagsList.Count -eq 0) {            
                     
-                    if ($ExistingtagsList.Count -gt 1) {
-                        $ExistingtagsList = $ExistingtagsList -join ", "
+                    if ($Check) {
+                        "Warning" | Write-Host -f Yellow               
+                        "`t`t - Current: {0}" -f $FormattedCurrentTags | Write-Host
+                        "`t`t - Missing: " | Write-Host -NoNewline
+                        Write-Host $FormattedMissingTags -f Yellow
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Missing: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedMissingTags | Write-Verbose
+                        $objStatus.TagsAssignmentStatus = "Warning"
+                        $objStatus.TagsAssignmentDetails = "Missing tags: $($FormattedMissingTags)"
                     }
                     else {
-                        $ExistingtagsList = $ExistingtagsList[0]
-                    }
-    
-                    Try {
-                        $DeviceTagsRemovalStatus = Remove-HPEGLDeviceTagFromDevice -SerialNumber $objStatus.SerialNumber -All -Verbose:$Verbose -ErrorAction Stop
-    
-                        if ($DeviceTagsRemovalStatus.Status -eq "Complete") {
+                        # Add missing tags   
+                        try {
+                            $TagsAssignmentStatus = Add-HPEGLDeviceTagToDevice -Tags $FormattedMissingTags -SerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
                             "InProgress" | Write-Host -f Yellow
-                            "`t`t - Status: " | Write-Host -NoNewline
-                            "Existing tags removed successfully." | Write-Host -ForegroundColor Green
-                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Existing tags ({7}) removed successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $ExistingtagsList | Write-Verbose
+                            if ($TagsAssignmentStatus.Status -eq "Complete" -or $TagsAssignmentStatus.Status -eq "Warning") {
+                                "`t`t - Status: " | Write-Host -NoNewline
+                                "Missing tags '{0}' added successfully." -f $Tags | Write-Host -ForegroundColor Green
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Missing tags '{7}' added successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags | Write-Verbose
+                                $objStatus.TagsAssignmentStatus = "Success"
+                                $objStatus.TagsAssignmentDetails = $TagsAssignmentStatus.Details
+                            }
+                            else {
+                                "`t`t - Status: " | Write-Host -NoNewline
+                                "Error adding missing tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Host -ForegroundColor Red
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding missing tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Verbose
+                                $objStatus.TagsAssignmentStatus = "Failed"
+                                $objStatus.TagsAssignmentDetails = "Error adding missing tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details
+                            }
                         }
-                        else {
+                        catch {
+                            "Failed" | Write-Host -f Red       
+                            "`t`t - Status: " | Write-Host -NoNewline
+                            "Error adding missing tags. Error: $_" | Write-Host -ForegroundColor Red
+                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding missing tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $_ | Write-Verbose
+                            $objStatus.TagsAssignmentStatus = "Failed"
+                            $objStatus.TagsAssignmentDetails = "Error adding missing tags to device. Error: $($_)"
+                        }     
+                    }
+
+                }
+                elseif ($ExtraTagsList.Count -gt 0 -and $MissingTagsList.Count -eq 0) {
+                    if ($Check) {
+                        "Warning" | Write-Host -f Yellow               
+                        "`t`t - Current: {0}" -f $FormattedCurrentTags | Write-Host
+                        "`t`t - Extra: " | Write-Host -NoNewline
+                        Write-Host $FormattedExtraTags -f Yellow
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Extra: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTags | Write-Verbose
+                        $objStatus.TagsAssignmentStatus = "Warning"
+                        $objStatus.TagsAssignmentDetails = "Extra tags: $($FormattedExtraTags)"
+                    }
+                    else {
+                        # Remove extra tags
+                        Try {
+                            $DeviceTagsRemovalStatus = Remove-HPEGLDeviceTagFromDevice -SerialNumber $objStatus.SerialNumber -Tags $FormattedExtraTagsWithoutValue -Verbose:$Verbose -ErrorAction Stop
+                            "InProgress" | Write-Host -f Yellow
+
+                            if ($DeviceTagsRemovalStatus.Status -eq "Complete") {
+                                "`t`t - Status: " | Write-Host -NoNewline
+                                "Extra tags '{0}' removed successfully." -f $FormattedExtraTagsWithoutValue | Write-Host -ForegroundColor Green
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Extra tags ({7}) removed successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTagsWithoutValue | Write-Verbose
+                            }
+                            else {
+                                "Failed" | Write-Host -f Red
+                                "`t`t - Status: " | Write-Host -NoNewline
+                                "Error removing extra tags. Status: {0} - Details: {1}" -f $DeviceTagsRemovalStatus.Status, $DeviceTagsRemovalStatus.Details | Write-Host -ForegroundColor Red
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing extra tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTagsWithoutValue, $DeviceTagsRemovalStatus.Status, $DeviceTagsRemovalStatus.Details | Write-Verbose
+                                $objStatus.TagsAssignmentStatus = "Failed"
+                                $objStatus.TagsAssignmentDetails = "Error removing extra tags. Status: $($DeviceTagsRemovalStatus.Status) - Details: $($DeviceTagsRemovalStatus.Details)"
+                            }
+                        }
+                        catch {
                             "Failed" | Write-Host -f Red
                             "`t`t - Status: " | Write-Host -NoNewline
-                            "Error removing tags. Status: {0} - Details: {1}" -f $DeviceTagsRemovalStatus.Status, $DeviceTagsRemovalStatus.Details | Write-Host -ForegroundColor Red
-                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $ExistingtagsList, $DeviceTagsRemovalStatus.Status, $DeviceTagsRemovalStatus.Details | Write-Verbose
+                            "Error removing extra tags '{0}'. Error: $_" -f $FormattedExtraTags | Write-Host -ForegroundColor Red
+                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing extra tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTagsWithoutValue, $_ | Write-Verbose
                             $objStatus.TagsAssignmentStatus = "Failed"
-                            $objStatus.TagsAssignmentDetails = "Error removing tags. Status: $($DeviceTagsRemovalStatus.Status) - Details: $($DeviceTagsRemovalStatus.Details)"
-                        }
-                    }
-                    catch {
-                        "Failed" | Write-Host -f Red
-                        "`t`t - Status: " | Write-Host -NoNewline
-                        "Error removing tags. Error: $_" | Write-Host -ForegroundColor Red
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $ExistingtagsList, $_ | Write-Verbose
-                        $objStatus.TagsAssignmentStatus = "Failed"
-                        $objStatus.TagsAssignmentDetails = "Error removing tags from device. Error: $($_)"
+                            $objStatus.TagsAssignmentDetails = "Error removing extra tags '$($FormattedExtraTags)' from device. Error: $($_)"
+                        }    
                     }                    
                 }
-                else {
-                    "InProgress" | Write-Host -f Yellow            
-                }
+                elseif ($MissingTagsList.Count -gt 0 -and $ExtraTagsList.Count -gt 0) {
+                    if ($Check) {
+                        "Warning" | Write-Host -f Yellow               
+                        "`t`t - Current: {0}" -f $FormattedCurrentTags | Write-Host
+                        "`t`t - Extra: " | Write-Host -NoNewline
+                        Write-Host $FormattedExtraTags -f Yellow
+                        "`t`t - Missing: " | Write-Host -NoNewline
+                        Write-Host $FormattedMissingTags -f Yellow
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tag configuration is required. Missing: {7} - Extra: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedMissingTags, $FormattedExtraTags | Write-Verbose
+                        $objStatus.TagsAssignmentStatus = "Warning"
+                        $objStatus.TagsAssignmentDetails = "Missing tags: $($FormattedMissingTags) - Extra tags: $($FormattedExtraTags)"
+                    }
+                    else {
+                        # Add missing tags   
+                        try {
+                            $TagsAssignmentStatus = Add-HPEGLDeviceTagToDevice -Tags $FormattedMissingTags -SerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
+                            "InProgress" | Write-Host -f Yellow    
+
+                            if ($TagsAssignmentStatus.Status -eq "Complete" -or $TagsAssignmentStatus.Status -eq "Warning") {
+                                "`t`t - Status: " | Write-Host -NoNewline
+                                "Missing tags '{0}' added successfully." -f $Tags | Write-Host -ForegroundColor Green
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Missing tags '{7}' added successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags | Write-Verbose
+                                $objStatus.TagsAssignmentStatus = "Success"
+                                $objStatus.TagsAssignmentDetails = $TagsAssignmentStatus.Details
+                            }
+                            else {
+                                "`t`t - Status: " | Write-Host -NoNewline
+                                "Error adding missing tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Host -ForegroundColor Red
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding missing tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Verbose
+                                $objStatus.TagsAssignmentStatus = "Failed"
+                                $objStatus.TagsAssignmentDetails = "Error adding missing tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details
+                            }
+                        }
+                        catch {
+                            "Failed" | Write-Host -f Red
+                            "`t`t - Status: " | Write-Host -NoNewline
+                            "Error adding missing tags. Error: $_" | Write-Host -ForegroundColor Red
+                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding missing tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $_ | Write-Verbose
+                            $objStatus.TagsAssignmentStatus = "Failed"
+                            $objStatus.TagsAssignmentDetails = "Error adding missing tags to device. Error: $($_)"
+                        }
+                        # Remove extra tags
+                        Try {
+                            $DeviceTagsRemovalStatus = Remove-HPEGLDeviceTagFromDevice -SerialNumber $objStatus.SerialNumber -Tags $FormattedExtraTagsWithoutValue -Verbose:$Verbose -ErrorAction Stop
+                            "InProgress" | Write-Host -f Yellow
     
+                            if ($DeviceTagsRemovalStatus.Status -eq "Complete") {
+                                "`t`t - Status: " | Write-Host -NoNewline
+                                "Extra tags '{0}' removed successfully." -f $FormattedExtraTagsWithoutValue | Write-Host -ForegroundColor Green
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Extra tags ({7}) removed successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $ExistingtagsList | Write-Verbose
+                            }
+                            else {
+                                "`t`t - Status: " | Write-Host -NoNewline
+                                "Error removing extra tags. Status: {0} - Details: {1}" -f $DeviceTagsRemovalStatus.Status, $DeviceTagsRemovalStatus.Details | Write-Host -ForegroundColor Red
+                                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing extra tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $FormattedExtraTagsWithoutValue, $DeviceTagsRemovalStatus.Status, $DeviceTagsRemovalStatus.Details | Write-Verbose
+                                $objStatus.TagsAssignmentStatus = "Failed"
+                                $objStatus.TagsAssignmentDetails = "Error removing extra tags. Status: $($DeviceTagsRemovalStatus.Status) - Details: $($DeviceTagsRemovalStatus.Details)"
+                            }
+                        }
+                        catch {
+                            "Failed" | Write-Host -f Red
+                            "`t`t - Status: " | Write-Host -NoNewline
+                            "Error removing extra tags. Error: $_" | Write-Host -ForegroundColor Red
+                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing extra tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $ExistingtagsList, $_ | Write-Verbose
+                            $objStatus.TagsAssignmentStatus = "Failed"
+                            $objStatus.TagsAssignmentDetails = "Error removing extra tags from device. Error: $($_)"
+                        }                        
+                    }
+                }                    
+            }
+            else {
+                if ($Check) {
+                    "OK" | Write-Host -f Green
+                    "`t`t - Current: {0}" -f $FormattedCurrentTags | Write-Host
+                    "`t`t - Missing: " | Write-Host -NoNewline
+                    "None" | Write-Host -ForegroundColor Green
+                    "`t`t - Extra: " | Write-Host -NoNewline
+                    "None" | Write-Host -ForegroundColor Green
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags configuration is not required as tags are already defined!" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                    $objStatus.TagsAssignmentStatus = "Success"
+                    $objStatus.TagsAssignmentDetails = "Tags configuration is not required as tags are already defined!"
+                }
+                else {
+                    "OK" | Write-Host -f Green
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Tags configuration is not required as tags are already defined!" | Write-Host -ForegroundColor Green
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags configuration is not required as tags are already defined!" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                    $objStatus.TagsAssignmentStatus = "Success"
+                    $objStatus.TagsAssignmentDetails = "Tags configuration is not required as tags are already defined!"
+                }
+            }    
+        }
+        else {
+            if ($Check) {                    
+                "Warning" | Write-Host -f Yellow
+                "`t`t - Current: " | Write-Host -NoNewline
+                "None" | Write-Host -ForegroundColor Yellow
+                "`t`t - Missing: " | Write-Host -NoNewline
+                $Tags | Write-Host -f Yellow
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags configuration is required as no tags are currently defined!" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                $objStatus.TagsAssignmentStatus = "Warning"
+                $objStatus.TagsAssignmentDetails = "Tags configuration is required as no tags are currently defined!"
+            }
+            else {
+                # Add missing tags   
                 try {
                     $TagsAssignmentStatus = Add-HPEGLDeviceTagToDevice -Tags $Tags -SerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
+                    "InProgress" | Write-Host -f Yellow       
 
                     if ($TagsAssignmentStatus.Status -eq "Complete" -or $TagsAssignmentStatus.Status -eq "Warning") {
                         "`t`t - Status: " | Write-Host -NoNewline
-                        "Tags '{0}' added successfully." -f $Tags | Write-Host -ForegroundColor Green
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Tags '{7}' added successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags | Write-Verbose
+                        "Missing tags '{0}' added successfully." -f $Tags | Write-Host -ForegroundColor Green
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Missing tags '{7}' added successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags | Write-Verbose
                         $objStatus.TagsAssignmentStatus = "Success"
                         $objStatus.TagsAssignmentDetails = $TagsAssignmentStatus.Details
                     }
                     else {
                         "`t`t - Status: " | Write-Host -NoNewline
-                        "Error adding tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Host -ForegroundColor Red
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Verbose
+                        "Error adding missing tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Host -ForegroundColor Red
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding missing tags '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details | Write-Verbose
                         $objStatus.TagsAssignmentStatus = "Failed"
-                        $objStatus.TagsAssignmentDetails = "Error adding tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details
+                        $objStatus.TagsAssignmentDetails = "Error adding missing tags. Status: {0} - Details: {1}" -f $TagsAssignmentStatus.Status, $TagsAssignmentStatus.Details
                     }
                 }
                 catch {
+                    "Failed" | Write-Host -f Red
                     "`t`t - Status: " | Write-Host -NoNewline
-                    "Error adding tags. Error: $_" | Write-Host -ForegroundColor Red
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $_ | Write-Verbose
+                    "Error adding missing tags. Error: $_" | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error adding missing tags '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Tags, $_ | Write-Verbose
                     $objStatus.TagsAssignmentStatus = "Failed"
-                    $objStatus.TagsAssignmentDetails = "Error adding tags to device. Error: $($_)"
+                    $objStatus.TagsAssignmentDetails = "Error adding missing tags to device. Error: $($_)"
                 }
             }
-        }
-        catch {
-            "Failed" | Write-Host -f Red
-            "`t`t - Status: " | Write-Host -NoNewline
-            "Error retrieving device details in the workspace. Error: $_" | Write-Host -ForegroundColor Red
-            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve device details in the workspace. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-            $objStatus.TagsAssignmentStatus = "Failed"
-            $objStatus.TagsAssignmentDetails = "Error retrieving device details. Error: $($_)"
-        }
-
+        }                     
     }
 
     #EndRegion
 
     #Region Check defined location 
 
-    if ($Check) {
+    if ($Check -and $LocationName -and $Devicefound) {
 
-        if ($LocationName) {
+        "`t - Location: " | Write-Host -NoNewline
 
-            "`t - Location: " | Write-Host -NoNewline
-
-            $Devicefound = $Null
-            $DeviceLocation = $Null
-
-            # Check if the device exists in the workspace
-            try {
-                $Devicefound = Get-HPEGLDevice -SerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
-     
-                if (-not $Devicefound) {  
-                    "Warning" | Write-Host -f Yellow               
-                    "`t`t - Current: " | Write-Host -NoNewline
-                    "None" | Write-Host -ForegroundColor Yellow
-                    "`t`t - Required: " | Write-Host -NoNewline
-                    "{0}" -f $LocationName | Write-Host   
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location '{7}' will be configured after the device is connected to COM." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName | Write-Verbose
-                    $objStatus.LocationAssignmentStatus = "Warning"
-                    $objStatus.LocationAssignmentDetails = "Location will be configured after the device is connected to COM."
-                }
-                else {           
+        $DeviceLocation = $Null
                     
-                    $DeviceLocation = $Devicefound | Select-Object -ExpandProperty location_name
+        $DeviceLocation = $Devicefound | Select-Object -ExpandProperty location_name
                                         
-                    # Check if the device is already assigned to the location
+        # Check if the device is already assigned to the location
     
-                    if (-not $DeviceLocation) { 
-                        "Warning" | Write-Host -f Yellow               
-                        "`t`t - Current: " | Write-Host -NoNewline
-                        "None" | Write-Host -ForegroundColor Yellow
-                        "`t`t - Required: " | Write-Host -NoNewline
-                        "{0}" -f $LocationName | Write-Host 
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location configuration is required as the location is not configured." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = "Warning"
-                        $objStatus.LocationAssignmentDetails = "Location configuration is required as the location is not configured."
-                    }
-                    elseif ($DeviceLocation -eq $LocationName) {                        
-                        "OK" | Write-Host -f Green               
-                        "`t`t - Current: " | Write-Host -NoNewline
-                        "{0}" -f $DeviceLocation | Write-Host -ForegroundColor Green
-                        "`t`t - Required: " | Write-Host -NoNewline
-                        "{0}" -f $LocationName | Write-Host 
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location configuration is not required as the location is already configured." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = "Success"
-                        $objStatus.LocationAssignmentDetails = "Location configuration is not required as the location is already configured."
-                    }
-                    else {
-                        "Warning" | Write-Host -f Yellow               
-                        "`t`t - Current: " | Write-Host -NoNewline
-                        "{0}" -f $DeviceLocation | Write-Host -ForegroundColor Yellow
-                        "`t`t - Required: " | Write-Host -NoNewline
-                        "{0}" -f $LocationName | Write-Host 
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location configuration is required as the location currently defined is incorrect." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = "Warning"
-                        $objStatus.LocationAssignmentDetails = "Location configuration is required as the location currently defined is incorrect."
-                    }                                
-                }   
-            }
-            catch {
-                "Failed" | Write-Host -f Red
-                "`t`t - Status: " | Write-Host -NoNewline
-                "Error retrieving device details in the workspace. Error: $_" | Write-Host -ForegroundColor Red
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve device details in the workspace. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                $objStatus.LocationAssignmentStatus = "Failed"
-                $objStatus.LocationAssignmentDetails = "Error retrieving device details. Error $($_)"
-            }          
+        if (-not $DeviceLocation) { 
+            "Warning" | Write-Host -f Yellow               
+            "`t`t - Current: " | Write-Host -NoNewline
+            "None" | Write-Host -ForegroundColor Yellow
+            "`t`t - Required: " | Write-Host -NoNewline
+            "{0}" -f $LocationName | Write-Host 
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location configuration is required as the location is not configured." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+            $objStatus.LocationAssignmentStatus = "Warning"
+            $objStatus.LocationAssignmentDetails = "Location configuration is required as the location is not configured."
+        }
+        elseif ($DeviceLocation -eq $LocationName) {                        
+            "OK" | Write-Host -f Green               
+            "`t`t - Current: " | Write-Host -NoNewline
+            "{0}" -f $DeviceLocation | Write-Host -ForegroundColor Green
+            "`t`t - Required: " | Write-Host -NoNewline
+            "{0}" -f $LocationName | Write-Host 
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location configuration is not required as the location is already configured." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+            $objStatus.LocationAssignmentStatus = "Success"
+            $objStatus.LocationAssignmentDetails = "Location configuration is not required as the location is already configured."
+        }
+        else {
+            "Warning" | Write-Host -f Yellow               
+            "`t`t - Current: " | Write-Host -NoNewline
+            "{0}" -f $DeviceLocation | Write-Host -ForegroundColor Yellow
+            "`t`t - Required: " | Write-Host -NoNewline
+            "{0}" -f $LocationName | Write-Host 
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location configuration is required as the location currently defined is incorrect." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+            $objStatus.LocationAssignmentStatus = "Warning"
+            $objStatus.LocationAssignmentDetails = "Location configuration is required as the location currently defined is incorrect."
         }                 
     }
     
@@ -3746,113 +3924,100 @@ ForEach ($iLO in $iLOs) {
 
     #Region Assign device to location (if any)
 
-    if (-not $Check -and $LocationName) {
+    if (-not $Check -and $LocationName -and $Devicefound) {
 
         "`t - Location: " | Write-Host -NoNewline
 
-        try {
-            $DeviceLocation = Get-HPEGLDevice -SerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop | Select-Object -ExpandProperty location_name       
+        $DeviceLocation = $Devicefound | Select-Object -ExpandProperty location_name       
 
-            if ($LocationName -ne $DeviceLocation) {
+        if ($LocationName -ne $DeviceLocation) {
     
-                # Remove location if the device is assigned to a different location
-                if ($DeviceLocation) {
+            # Remove location if the device is assigned to a different location
+            if ($DeviceLocation) {
     
-                    try {
-                        $LocationRemovalStatus = Remove-HPEGLDeviceLocation -DeviceSerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
-                        
-                        if ($LocationRemovalStatus.Status -eq "Complete") {
-                            "InProgress" | Write-Host -f Yellow
-                            "`t`t - Status: " | Write-Host -NoNewline
-                            "Device removed from location successfully." | Write-Host -ForegroundColor Green
-                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device removed from location '{7}' successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DeviceLocation | Write-Verbose
-                        }
-                        else {
-                            "Failed" | Write-Host -f Red
-                            "`t`t - Status: " | Write-Host -NoNewline
-                            "Error removing device from location. Status: {0} - Details: {1}" -f $LocationRemovalStatus.Status, $LocationRemovalStatus.Details | Write-Host -ForegroundColor Red
-                            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing device from location '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DeviceLocation, $LocationRemovalStatus.Status, $LocationRemovalStatus.Details | Write-Verbose
-                            $objStatus.LocationAssignmentStatus = "Failed"
-                            $objStatus.LocationAssignmentDetails = "Error removing device from location '$($DeviceLocation)'. Status: $($LocationRemovalStatus.Status) - Details: $($LocationRemovalStatus.Details)"
-                            $objStatus.Status = "Failed"
-                            [void]$iLOPreparationStatus.Add($objStatus)
-                            continue
-                        }
-                    }
-                    catch {
-                        "Failed" | Write-Host -f Red
-                        "`t`t - Status: " | Write-Host -NoNewline
-                        "Error removing device from location. Error: $_" | Write-Host -ForegroundColor Red
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to remove device from location. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = "Failed"
-                        $objStatus.LocationAssignmentDetails = "Failed to remove device from location. Error: $($_)"
-                        $objStatus.Status = "Failed"
-                        [void]$iLOPreparationStatus.Add($objStatus)
-                        continue
-                    }    
-                }  
-                else {   
-                    "InProgress" | Write-Host -f Yellow
-                    "`t`t - Status: " | Write-Host -NoNewline
-                    "No current location assigned. Proceeding to assign new location." | Write-Host -ForegroundColor Yellow
-                }
-            
-            
-                # Assign the device to the defined location
                 try {
-    
-                    $LocationAssignmentStatus = Set-HPEGLDeviceLocation -LocationName $LocationName -DeviceSerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop 
-
-                    if ($LocationAssignmentStatus.Status -eq "Failed") {
+                    $LocationRemovalStatus = Remove-HPEGLDeviceLocation -DeviceSerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop
+                        
+                    if ($LocationRemovalStatus.Status -eq "Complete") {
+                        "InProgress" | Write-Host -f Yellow
                         "`t`t - Status: " | Write-Host -NoNewline
-                        "Error assigning location. Status: {0} - Details: {1}" -f $LocationAssignmentStatus.Status, $LocationAssignmentStatus.Details | Write-Host -ForegroundColor Red
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error assigning location '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName, $LocationAssignmentStatus.Status, $LocationAssignmentStatus.Details | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = "Failed"
-                        $objStatus.LocationAssignmentDetails = "Failed to assign location. Error: $($_)"
-                        $objStatus.Status = "Failed"
-                        [void]$iLOPreparationStatus.Add($objStatus)
-                        continue
+                        "Device removed from location '{0}' successfully." -f $DeviceLocation | Write-Host -ForegroundColor Green
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device removed from location '{7}' successfully." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DeviceLocation | Write-Verbose
                     }
                     else {
+                        "Failed" | Write-Host -f Red
                         "`t`t - Status: " | Write-Host -NoNewline
-                        "Location assigned successfully." | Write-Host -ForegroundColor Green
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location '{7}' successfully assigned." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName | Write-Verbose
-                        $objStatus.LocationAssignmentStatus = "Success"
-                        $objStatus.LocationAssignmentDetails = $LocationAssignmentStatus.Details
-                    }                    
+                        "Error removing device from '{0}' location. Status: {1} - Details: {2}" -f $DeviceLocation, $LocationRemovalStatus.Status, $LocationRemovalStatus.Details | Write-Host -ForegroundColor Red
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing device from location '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DeviceLocation, $LocationRemovalStatus.Status, $LocationRemovalStatus.Details | Write-Verbose
+                        $objStatus.LocationAssignmentStatus = "Failed"
+                        $objStatus.LocationAssignmentDetails = "Error removing device from location '$($DeviceLocation)'. Status: $($LocationRemovalStatus.Status) - Details: $($LocationRemovalStatus.Details)"
+                        $objStatus.Status = "Failed"
+                        [void]$iLOPreparationStatus.Add($objStatus)
+                        continue
+                    }
                 }
                 catch {
+                    "Failed" | Write-Host -f Red
                     "`t`t - Status: " | Write-Host -NoNewline
-                    "Error assigning location. Error: $_" | Write-Host -ForegroundColor Red
-                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error assigning location '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName, $_ | Write-Verbose
+                    "Error removing device from location '{0}'. Error: $_" -f $DeviceLocation | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to remove device from location '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DeviceLocation, $_ | Write-Verbose
                     $objStatus.LocationAssignmentStatus = "Failed"
-                    $objStatus.LocationAssignmentDetails = "Failed to assign location. Error: $($_)"
+                    $objStatus.LocationAssignmentDetails = "Failed to remove device from location '$($DeviceLocation)'. Error: $($_)"
+                    $objStatus.Status = "Failed"
+                    [void]$iLOPreparationStatus.Add($objStatus)
+                    continue
+                }    
+            }  
+            else {   
+                "InProgress" | Write-Host -f Yellow
+                "`t`t - Status: " | Write-Host -NoNewline
+                "No current location assigned. Proceeding to assign new location." | Write-Host -ForegroundColor Yellow
+            }
+            
+            
+            # Assign the device to the defined location
+            try {
+    
+                $LocationAssignmentStatus = Set-HPEGLDeviceLocation -LocationName $LocationName -DeviceSerialNumber $objStatus.SerialNumber -Verbose:$Verbose -ErrorAction Stop 
+
+                if ($LocationAssignmentStatus.Status -eq "Failed") {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Error assigning location '{0}'. Status: {1} - Details: {2}" -f $LocationName, $LocationAssignmentStatus.Status, $LocationAssignmentStatus.Details | Write-Host -ForegroundColor Red
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error assigning location '{7}'. Status: {8} - Details: {9}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName, $LocationAssignmentStatus.Status, $LocationAssignmentStatus.Details | Write-Verbose
+                    $objStatus.LocationAssignmentStatus = "Failed"
+                    $objStatus.LocationAssignmentDetails = "Failed to assign location '$($LocationName)'. Error: $($_)"
                     $objStatus.Status = "Failed"
                     [void]$iLOPreparationStatus.Add($objStatus)
                     continue
                 }
-    
+                else {
+                    "`t`t - Status: " | Write-Host -NoNewline
+                    "Location '{0}' assigned successfully." -f $LocationName | Write-Host -ForegroundColor Green
+                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location '{7}' successfully assigned." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName | Write-Verbose
+                    $objStatus.LocationAssignmentStatus = "Success"
+                    $objStatus.LocationAssignmentDetails = $LocationAssignmentStatus.Details
+                }                    
             }
-            # If the device is already assigned to the defined location
-            else {
-                "Complete" | Write-Host -f Green
+            catch {
                 "`t`t - Status: " | Write-Host -NoNewline
-                "Location already defined." | Write-Host -ForegroundColor Green
-                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location '{7}' already defined. Skipping location assignment..." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DeviceLocation | Write-Verbose
-                $objStatus.LocationAssignmentStatus = "Success"
-                $objStatus.LocationAssignmentDetails = "Location already defined. Skipping location assignment..."
-            }       
+                "Error assigning location '{0}'. Error: $_" -f $LocationName | Write-Host -ForegroundColor Red
+                "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error assigning location '{7}'. Error: {8}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $LocationName, $_ | Write-Verbose
+                $objStatus.LocationAssignmentStatus = "Failed"
+                $objStatus.LocationAssignmentDetails = "Failed to assign location '$($LocationName)'. Error: $($_)"
+                $objStatus.Status = "Failed"
+                [void]$iLOPreparationStatus.Add($objStatus)
+                continue
+            }
+    
         }
-        catch {
-            "Failed" | Write-Host -f Red
+        # If the device is already assigned to the defined location
+        else {
+            "Complete" | Write-Host -f Green
             "`t`t - Status: " | Write-Host -NoNewline
-            "Error retrieving device details in the workspace. Error: $_" | Write-Host -ForegroundColor Red
-            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Failed to retrieve device details in the workspace. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
-            $objStatus.LocationAssignmentStatus = "Failed"
-            $objStatus.LocationAssignmentDetails = "Failed to retrieve device details. Error: $($_)"
-            $objStatus.Status = "Failed"
-            [void]$iLOPreparationStatus.Add($objStatus)
-            continue      
+            "Location '{0}' already defined." -f $LocationName | Write-Host -ForegroundColor Green
+            "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Location '{7}' already defined. Skipping location assignment..." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $DeviceLocation | Write-Verbose
+            $objStatus.LocationAssignmentStatus = "Success"
+            $objStatus.LocationAssignmentDetails = "Location already defined. Skipping location assignment..."
         }
     }
 

@@ -4,14 +4,21 @@
 > Ensure you are using the latest version of the script for optimal performance and compatibility: [**Prepare-and-Connect-iLOs-to-COM-v2.ps1**](https://github.com/jullienl/HPE-Compute-Ops-Management/blob/main/PowerShell/Onboarding/Prepare-and-Connect-iLOs-to-COM-v2.ps1).
 
 
-This PowerShell script automates the process of connecting HPE Gen10 and later servers to HPE Compute Ops Management (COM). It also allows you to prepare and configure iLO settings, such as DNS, NTP, and firmware updates, before connecting the servers to COM.
-
+This PowerShell script is designed to streamline the onboarding process of HPE Gen10 and later servers to HPE Compute Ops Management (COM) by automating the necessary preparations and configurations required for successful integration.
 
 This preparation is essential to ensure that iLOs are ready for COM and can effectively communicate and be managed by the platform. It includes:
 
 - **Setting up DNS**: To ensure iLO can reach the cloud platform
 - **Setting up NTP**: To ensure the date and time of iLO are correct, crucial for securing the mutual TLS (mTLS) connections between COM and iLO.
 - **Updating iLO firmware**: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, or iLO6 1.64 or later).
+
+This script is designed to be idempotent, meaning you can safely run it multiple times without causing issues or duplicating actions. Here’s how it works:
+
+- **Parameter Skipping**: The script checks each parameter or configuration before making changes. If a parameter is already set or a step has already been completed, the script skips that step. This prevents unnecessary updates or reconfiguration.
+- **iLO Connection Check**: Before attempting to connect an iLO to COM, the script verifies if the iLO is already connected. If it is, the script skips the reconnection process for that iLO, avoiding redundant operations.
+- **Status Reporting**: The script generates a detailed status report at the end of its execution, indicating which iLOs were successfully connected, which were skipped, and any warnings or issues encountered. This report helps you track the state of each iLO without needing to re-run the script unnecessarily.
+
+This approach ensures that running the script repeatedly will not disrupt existing configurations or connections. It only applies changes where needed, making it safe and efficient for ongoing management or troubleshooting.
 
 The script requires a CSV file and supports two options for iLO credentials:
 
@@ -36,8 +43,6 @@ The script requires a CSV file and supports two options for iLO credentials:
    > The specified accounts must have Administrator privileges, or at minimum, the "Configure iLO Settings" privilege.
 
 Choose the CSV format that matches your environment.
-
-
 
 To see a demonstration of this script in action, watch the video:
 
@@ -78,6 +83,7 @@ The script can be run with the following parameters:
 
 The script includes a comprehensive "What's New" section in the header that documents all recent updates and improvements. Key highlights include:
 
+- **July 11, 2025**: Enhanced script reliability and validation by adding retry logic for iLO chassis information retrieval, implementing comprehensive post-onboarding verification of server presence and subscription status, optimizing DNS configuration handling for DHCP-managed settings, and improving tagging efficiency to prevent redundant updates.
 - **July 9, 2025**: Enhanced script reliability by adding connection retry logic and activation key compatibility validation for server onboarding.
 - **July 8, 2025**: Added a new feature to the script that allows users to specify the subscription tier and whether to include evaluation subscriptions. This provides more flexibility in selecting the appropriate COM subscription for onboarding.
 - **July 2, 2025**: Added many improvements to the entire script. Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script. Improved on-screen reporting for "Unsupported/Skipped" servers.
@@ -141,37 +147,51 @@ For detailed information about all changes and improvements, refer to the `.WHAT
 
 2. Review and update the variables in the "Variables definition" section of the script as needed.
     
-    All configuration variables are defined near the top of the script, in the section labeled:
+   All configuration variables are defined near the top of the script, in the section labeled:
 
-    `#Region --------------------------- Variables definition -------------------------------------------`
+   `#Region --------------------------- Variables definition -------------------------------------------`
     
-    Update the following variables according to your environment:
+   Update the following variables according to your environment:
 
-     - Path to the CSV file containing the list of iLO IP addresses or resolvable hostnames.
-     - Path to the iLO firmware flash files for iLO5 and iLO6.
-     - Username of the iLO account.
-     - DNS servers to configure in iLO (optional).
-     - SNTP servers to configure in iLO (optional).
-     - iLO Web Proxy or Secure Gateway settings (optional).
-        - Note: The Secure Gateway must be pre-configured in your COM instance before running this script.
-        - You cannot use both web proxy variables and Secure Gateway variables simultaneously.
-     - HPE GreenLake account with HPE GreenLake and COM administrative privileges.
-     - HPE GreenLake workspace name where the COM instance is provisioned.
-     - Region where the COM instance is provisioned.
-     - Location name where the devices will be assigned (optional).
-        - Note: The location must be created in the HPE GreenLake workspace before running this script.
-     - Tags to assign to devices (optional).
+   **Required configuration**:
 
-    All these variables are clearly marked and documented in the "Variables definition" section for easy customization.
+   `$iLOcsvPath` - Path to your CSV file containing the iLO details   
+   `$iLO5binFile` and `$iLO6binFile` - Path to the iLO firmware flash files for iLO5 and iLO6   
+   `$iLOUserName` - iLO administrator account username (only needed if missing from the CSV file)    
+   `$WorkspaceName` - Your HPE GreenLake workspace name where the COM instance is provisioned  
+   `$Region` - Your COM instance region  
+   `$HPEAccount` - Your HPE GreenLake account email with HPE GreenLake and COM administrative privileges  
+   `$OktaSSOEmail` - Set to $true if using @HPE.com email. Note that SSO is available for users with an hpe.com email address only   
+   `$SubscriptionTier` - Set to 'PROLIANT' or 'ALLETRA' based on your device type  
+   `$UseEval `- Set to $true to include evaluation subscriptions  
+
+   **Optional configuration**:
+
+   `$DNSservers` and `$DNStypes` - DNS server configuration to configure in iLO
+   `$SNTPservers` - Time synchronization servers to configure in iLO
+   `$WebProxyServer`, `$WebProxyPort`, `$WebProxyUsername`, `$WebProxyPassword` - Web proxy settings to configure in iLO  
+   `$SecureGateway `- Secure Gateway FQDN (alternative to web proxy)  
+   - The Secure Gateway must be pre-configured in your COM instance before running this script.  
+   - You cannot use both web proxy variables and Secure Gateway variables simultaneously.    
+
+   `$LocationName` - Location assignment for devices  
+   - The location must be created in the HPE GreenLake workspace before running this script.
+   
+   `$Tags` - Custom tags to assign to devices   
+
+   All these variables are clearly marked and documented in the "Variables definition" section for easy customization.
+
 3. Run the script in a PowerShell 7 environment.
+
 4. Review the output to ensure that the iLOs are successfully connected to COM.
 
-**Note**: 
-- The script can be run multiple times with different CSV files to assign different tags or locations to servers.
-- Firmware updates can take significantly longer when the iLO firmware binary is not located on the local network, due to slower file transfer speeds. 
-  To optimize the process, make sure the iLO firmware binary is accessible on the same local network as your iLOs. 
-  This typically allows updates to complete more quickly and significantly reduces overall delays.
-- To accelerate onboarding through parallel processing, consider splitting your list of iLOs into multiple CSV files and running several instances of the script simultaneously, each with a different CSV file.
+## Important Note: 
+- To accelerate onboarding through parallel processing, consider splitting your list of iLOs into multiple CSV files and running several instances of the script simultaneously, each with a different CSV file. Note that a maximum of 7 instances can be run concurrently due to the current limit of 7 Personal API clients per user in a workspace.
+
+- To assign different tags or locations to servers, create separate CSV files for each group with the desired tags or location values, and run the script multiple times using those files. This approach allows you to customize tags and location assignments for each set of servers during onboarding.
+
+- Firmware updates can take significantly longer when the iLO firmware binary is not located on the local network, due to slower file transfer speeds. To optimize the process, make sure the iLO firmware binary is accessible on the same local network as your iLOs. This typically allows updates to complete more quickly and significantly reduces overall delays.
+
 
 
 ## Examples
