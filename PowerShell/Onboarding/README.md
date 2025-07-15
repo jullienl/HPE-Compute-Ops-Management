@@ -83,6 +83,7 @@ The script can be run with the following parameters:
 
 The script includes a comprehensive "What's New" section in the header that documents all recent updates and improvements. Key highlights include:
 
+- **July 15, 2025**: Fixed activation key collection issues when multiple keys were available and ensured proper iLO disconnection from COM after device removal when no valid subscription key was found, preventing future onboarding failures.
 - **July 11, 2025**: Enhanced script reliability and validation by adding retry logic for iLO chassis information retrieval, implementing comprehensive post-onboarding verification of server presence and subscription status, optimizing DNS configuration handling for DHCP-managed settings, and improving tagging efficiency to prevent redundant updates.
 - **July 9, 2025**: Enhanced script reliability by adding connection retry logic and activation key compatibility validation for server onboarding.
 - **July 8, 2025**: Added a new feature to the script that allows users to specify the subscription tier and whether to include evaluation subscriptions. This provides more flexibility in selecting the appropriate COM subscription for onboarding.

@@ -3,6 +3,9 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+July 15, 2025
+ - Fixed an issue where activation key could be incorrectly collected if several activation keys were available.
+ - Fixed an issue where iLOs could remain connected to COM after removal from the service instance when no valid subscription key was found. The script now reliably disconnects iLO from COM following device removal, ensuring proper cleanup and preventing onboarding failures in future attempts.
 July 11, 2025
  - Improved reliability when retrieving iLO chassis information by adding retry logic. The script now attempts up to five times with a two-second delay between attempts, reducing failures due to transient iLO response issues.
  - Enhanced post-onboarding validation: After onboarding, the script now checks that each server is present in the workspace and assigned to the COM instance, and verifies its subscription status. Any server not found or lacking a valid subscription is reported as a failure in the status report and removed from the COM instance.
@@ -3017,8 +3020,8 @@ ForEach ($iLO in $iLOs) {
                 }
 
                 # Check if an activation key already exists
-                $ExistingServerActivationKey = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop
-                $ExistingActivationKey = $ExistingServerActivationKey | Where-Object $existingKeyCriteria | Sort-Object expiresAt -Descending | Select-Object -First 1 -ExpandProperty ActivationKey
+                $ExistingServerActivationKeys = Get-HPECOMServerActivationKey -Region $Region -ErrorAction Stop -Verbose:$Verbose
+                $ExistingActivationKey = $ExistingServerActivationKeys | Where-Object $existingKeyCriteria | Sort-Object expiresAt -Descending | Select-Object -First 1
 
                 if (-not $ExistingActivationKey) {
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - No existing COM {7} activation key found matching criteria. Generating a new one..." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType | Write-Verbose
@@ -3064,12 +3067,9 @@ ForEach ($iLO in $iLOs) {
                 }
                 else {
 
-                    # Use the existing activation key
-                    "`t`t - Status: " | Write-Host -NoNewline
-
                     # If an existing activation key is found, check the subscription key correspond to the server type 
-                    $MatchingSubscriptionKey = $ExistingServerActivationKey.subscriptionKey
-                    $SMatchingSubscriptionKeyTier = Get-HPEGLSubscription -SubscriptionKey $MatchingSubscriptionKey | Select-Object -ExpandProperty tier 
+                    $MatchingSubscriptionKey = $ExistingActivationKey.subscriptionKey
+                    $MatchingSubscriptionKeyTier = Get-HPEGLSubscription -SubscriptionKey $MatchingSubscriptionKey -Verbose:$Verbose | Select-Object -ExpandProperty tier 
 
                     # Determine the server family based on the product name
                     $serverFamily = if ($objStatus.ProductName -match "ProLiant") { "ProLiant" }
@@ -3078,22 +3078,25 @@ ForEach ($iLO in $iLOs) {
                     
                     # Check if the subscription key matches the server family
                     if ($serverFamily -eq "Unknown") {
-                        "Validation: Error! Subscription tier '{0}' assigned to the activation key cannot be validated due to unknown server family for model ({1})." -f $SMatchingSubscriptionKeyTier, $objStatus.ProductName | Write-Host -ForegroundColor Red
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "Validation: Error! Subscription tier '{0}' assigned to the activation key cannot be validated due to unknown server family for model ({1})." -f $MatchingSubscriptionKeyTier, $objStatus.ProductName | Write-Host -ForegroundColor Red
                         $objStatus.Status = "Failed"
-                        $objStatus.Details = "Subscription tier $($SMatchingSubscriptionKeyTier) assigned to the activation key cannot be validated due to unknown server family for model $($objStatus.ProductName)."
+                        $objStatus.Details = "Subscription tier $($MatchingSubscriptionKeyTier) assigned to the activation key cannot be validated due to unknown server family for model $($objStatus.ProductName)."
                         [void]$iLOPreparationStatus.Add($objStatus)
                         continue
                     } 
-                    elseif ($SMatchingSubscriptionKeyTier -like "*$serverFamily*") {
-                        "Validation: Subscription tier '{0}' assigned to the activation key is compatible with server model ({1})." -f $SMatchingSubscriptionKeyTier, $objStatus.ProductName | Write-Host -ForegroundColor Green
+                    elseif ($MatchingSubscriptionKeyTier -like "*$serverFamily*") {
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "Validation: Subscription tier '{0}' assigned to the activation key is compatible with server model ({1})." -f $MatchingSubscriptionKeyTier, $objStatus.ProductName | Write-Host -ForegroundColor Green
                         # Use the existing activation key
                         "`t`t - Status: " | Write-Host -NoNewline
-                        "Existing COM {0} activation key '{1}' successfully retrieved for region '{2}'." -f $keyType, $ExistingActivationKey, $Region | Write-Host -ForegroundColor Green
-                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Existing COM {7} activation key '{8}' successfully retrieved for region '{9}'." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType, $ExistingActivationKey, $Region | Write-Verbose
-                        $COMActivationKey = $ExistingActivationKey
+                        "Existing COM {0} activation key '{1}' successfully retrieved for region '{2}'." -f $keyType, $ExistingActivationKey.activationKey, $Region | Write-Host -ForegroundColor Green
+                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Existing COM {7} activation key '{8}' successfully retrieved for region '{9}'." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $keyType, $ExistingActivationKey.activationKey, $Region | Write-Verbose
+                        $COMActivationKey = $ExistingActivationKey.activationKey
                     } 
                     else {
-                        "Validation: Subscription tier '{0}' assigned to the activation key is incompatible with {1} server ({2}). Generating a new activation key..." -f $SMatchingSubscriptionKeyTier, $serverFamily, $objStatus.ProductName | Write-Host -ForegroundColor Red
+                        "`t`t - Status: " | Write-Host -NoNewline
+                        "Validation: Subscription tier '{0}' assigned to the activation key is incompatible with {1} server ({2}). Generating a new activation key..." -f $MatchingSubscriptionKeyTier, $serverFamily, $objStatus.ProductName | Write-Host -ForegroundColor Red
                         # Generating a new activation key to match the server model
                         
                         # Get a valid subscription key for the server
@@ -3461,8 +3464,7 @@ ForEach ($iLO in $iLOs) {
                         $objStatus.SubscriptionAssignmentStatus = "Failed"
                         $objStatus.SubscriptionAssignmentDetails = "Device does not have a subscription for Compute Ops Management."
                     }
-                    # If no subscription is allocated, we can consider it as a failure and remove the device from the service assignment
-                    # no subscription is allocated, that the script remove the server from the region. Then return an error no valid subscription found.
+                    # If no subscription is allocated, we can consider it as a failure and remove the device from the service assignment and disconnect the iLO from COM                    # 
                     else {
                         "`t`t - Status: " | Write-Host -NoNewline
                         "No valid subscription found. Please verify that the subscription tier specified in the script variables matches the server hardware type (e.g., ProLiant or Alletra)." | Write-Host -ForegroundColor Red
@@ -3487,6 +3489,32 @@ ForEach ($iLO in $iLOs) {
                                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device removed from Compute Ops Management service instance because no valid subscription was found." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
                                 $objStatus.Status = "Failed"
                                 $objStatus.Details = "Device removed from Compute Ops Management service instance because no valid subscription was found."
+
+                                # Disconnect iLO from COM (used to fix an issue where iLO remains connected to COM even after removing the device from the service)
+                                try {
+                                    $iLOCODisconnectionStatus = Disable-HPEiLOComputeOpsManagement -Connection $iLOconnection -Verbose:$Verbose -ErrorAction Stop
+
+                                    if ($iLOCODisconnectionStatus -eq $Null) {
+                                        "`t`t`t - Status: " | Write-Host -NoNewline
+                                        "iLO successfully disconnected from Compute Ops Management service instance." | Write-Host -ForegroundColor Green
+                                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - iLO successfully disconnected from Compute Ops Management service instance." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                                    }
+                                    else {
+                                        "`t`t`t - Status: " | Write-Host -NoNewline
+                                        "Error disconnecting iLO from Compute Ops Management service instance." | Write-Host -ForegroundColor Red
+                                        "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error disconnecting iLO from Compute Ops Management service instance." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
+                                        $objStatus.Status = "Failed"
+                                        $objStatus.Details = "Device removed from Compute Ops Management service instance due to missing valid subscription, but an error occurred while disconnecting iLO from the Compute Ops Management service instance."
+                                    }
+                                    
+                                }
+                                catch {
+                                    "`t`t`t - Status: " | Write-Host -NoNewline
+                                    "Error disconnecting iLO from Compute Ops Management service instance." | Write-Host -ForegroundColor Red
+                                    "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error disconnecting iLO from Compute Ops Management service instance. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
+                                    $objStatus.Status = "Failed"
+                                    $objStatus.Details = "Device removed from Compute Ops Management service instance due to missing valid subscription, but an error occurred while disconnecting iLO from the Compute Ops Management service instance. Error: $($_)"
+                                }
                             }
                         }
                         catch {
@@ -3495,7 +3523,7 @@ ForEach ($iLO in $iLOs) {
                             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Error removing device from Compute Ops Management service instance. Error: {7}" -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $_ | Write-Verbose
                             $objStatus.Status = "Failed"
                             $objStatus.Details = "No valid subscription found. Error removing device from Compute Ops Management service instance. Error: $($_)"
-                        }
+                        }                    
                     }
                 }
             }
