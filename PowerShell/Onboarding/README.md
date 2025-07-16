@@ -83,6 +83,7 @@ The script can be run with the following parameters:
 
 The script includes a comprehensive "What's New" section in the header that documents all recent updates and improvements. Key highlights include:
 
+- **July 16, 2025**: Extended the logic for A55 or A56 ROM family servers to handle compatibility with iLO firmware versions. Now if iLO 1.62 or earlier is detected with any ROM version, the script will use the workspace ID onboarding method.
 - **July 15, 2025**: Fixed activation key collection issues when multiple keys were available and ensured proper iLO disconnection from COM after device removal when no valid subscription key was found, preventing future onboarding failures.
 - **July 11, 2025**: Enhanced script reliability and validation by adding retry logic for iLO chassis information retrieval, implementing comprehensive post-onboarding verification of server presence and subscription status, optimizing DNS configuration handling for DHCP-managed settings, and improving tagging efficiency to prevent redundant updates.
 - **July 9, 2025**: Enhanced script reliability by adding connection retry logic and activation key compatibility validation for server onboarding.

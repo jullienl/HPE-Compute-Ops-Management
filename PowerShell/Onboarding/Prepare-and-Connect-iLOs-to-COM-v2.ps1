@@ -3,6 +3,8 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+July 16, 2025
+ - Extended the logic for A55 or A56 ROM family servers to handle compatibility with iLO firmware versions. Now if iLO 1.62 or earlier is detected with any ROM version, the script will use the workspace ID onboarding method.
 July 15, 2025
  - Fixed an issue where activation key could be incorrectly collected if several activation keys were available.
  - Fixed an issue where iLOs could remain connected to COM after removal from the service instance when no valid subscription key was found. The script now reliably disconnects iLO from COM following device removal, ensuring proper cleanup and preventing onboarding failures in future attempts.
@@ -1407,16 +1409,13 @@ ForEach ($iLO in $iLOs) {
         # For these families, onboarding uses the workspace ID instead of a COM activation key.
         # - A55: HPE ProLiant DL365 Gen11 and HPE ProLiant DL385 Gen11
         # - A56: HPE ProLiant DL325 Gen11 and HPE ProLiant DL345 Gen11
-        # List of server system ROM families that require special onboarding logic
-        # - A55: HPE ProLiant DL365 Gen11 and HPE ProLiant DL385 Gen11
-        # - A56: HPE ProLiant DL325 Gen11 and HPE ProLiant DL345 Gen11
         $ImpactedServerSystemROMFamilies = @("A55", "A56")
 
         # Handle A55/A56 servers with specific firmware and system ROM version combinations
         if ($ImpactedServerSystemROMFamilies -contains $objStatus.ServerSystemROMFamily) {
             
-            # Supported combination: iLO FW ≤ 1.62 AND System ROM ≤ 1.56 → Use Workspace ID
-            if ([version]$objStatus.iLOFirmwareVersion -le [version]"1.62" -and [version]$objStatus.ServerSystemROMVersion -le [version]"1.56") {
+            # Supported combination: iLO FW ≤ 1.62 → Use Workspace ID onboarding
+            if ([version]$objStatus.iLOFirmwareVersion -le [version]"1.62") {
                 $objStatus.OnboardingType = "Workspace ID"
             }
             # Supported combination: iLO FW ≥ 1.63 AND System ROM ≥ 1.58 → Use PIN-based onboarding (Activation Key)
