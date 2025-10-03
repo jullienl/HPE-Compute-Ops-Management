@@ -3,7 +3,7 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
-October 10, 2025
+October 3, 2025
  - Removed the -serialNumber parameter from the Connect-HPEGLDeviceComputeiLOtoCOM cmdlet calls to ensure compatibility with HPECOMCmdlets v1.0.16 module.
  - Added -RemoveExistingiLOProxySettings parameter to all Connect-HPEGLDeviceComputeiLOtoCOM cmdlet calls (introduced in v1.0.16). This ensures any existing proxy settings on the iLO are cleared before connecting to COM, preventing connection issues when no proxy is required and improving onboarding reliability.
  - Changed a few object properties to match the latest version of the HPECOMCmdlets module (v1.0.16).
