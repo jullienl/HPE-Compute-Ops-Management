@@ -3,6 +3,10 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+October 10, 2025
+ - Removed the -serialNumber parameter from the Connect-HPEGLDeviceComputeiLOtoCOM cmdlet calls to ensure compatibility with HPECOMCmdlets v1.0.16 module.
+ - Added -RemoveExistingiLOProxySettings parameter to all Connect-HPEGLDeviceComputeiLOtoCOM cmdlet calls (introduced in v1.0.16). This ensures any existing proxy settings on the iLO are cleared before connecting to COM, preventing connection issues when no proxy is required and improving onboarding reliability.
+ - Changed a few object properties to match the latest version of the HPECOMCmdlets module (v1.0.16).
 July 16, 2025
  - Extended the logic for A55 or A56 ROM family servers to handle compatibility with iLO firmware versions. Now if iLO 1.62 or earlier is detected with any ROM version, the script will use the workspace ID onboarding method.
 July 15, 2025
@@ -3193,7 +3197,7 @@ ForEach ($iLO in $iLOs) {
                             -IloProxyServer $SecureGateway -IloProxyPort "8080" -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
                     }
                     else {
-                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -RemoveExistingiLOProxySettings `
                             -ActivationKeyfromCOM $COMActivationKey -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
                             -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop 
                     }    
@@ -3337,25 +3341,25 @@ ForEach ($iLO in $iLOs) {
                 try {
                     if ($WebProxyUsername) {
             
-                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
                             -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
                             -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -IloProxyUserName $WebProxyUsername -IloProxyPassword $WebProxyPassword `
                             -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
                     }
                     elseif ($WebProxyServer) {
             
-                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
                             -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
                             -IloProxyServer $WebProxyServer -IloProxyPort $WebProxyPort -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
                     }
                     elseif ($SecureGateway) {
             
-                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP `
                             -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
                             -IloProxyServer $SecureGateway -IloProxyPort "8080" -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop
                     }
                     else {
-                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -SerialNumber $objStatus.SerialNumber `
+                        $OnboardingStatus = Connect-HPEGLDeviceComputeiLOtoCOM -iLOCredential $iLOcredentials -IloIP $iLO.IP -RemoveExistingiLOProxySettings `
                             -SkipCertificateValidation:$SkipCertificateValidation -DisconnectiLOfromOneView:$DisconnectiLOfromOneView `
                             -Verbose:$Verbose -InformationAction SilentlyContinue -ErrorAction Stop 
                     }    
@@ -3440,7 +3444,7 @@ ForEach ($iLO in $iLOs) {
             "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device found in the workspace." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
                 
             # Check if the device is assigned to the Compute Ops Management service
-            if ($Devicefound.application_instance_id -and $Devicefound.application_instance_id -eq $COMInstance.application_instance_id) {
+            if ($Devicefound.application.id -and $Devicefound.application.id -eq $COMInstance.application_id) {
                 "`t`t - Status: " | Write-Host -NoNewline
                 "Device is assigned to the '{0}' Compute Ops Management service." -f $Region | Write-Host -ForegroundColor Green
                 "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device is assigned to the '{7}' Compute Ops Management service." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM, $Region | Write-Verbose
@@ -3448,7 +3452,7 @@ ForEach ($iLO in $iLOs) {
                 $objStatus.ServiceAssignmentDetails = "Device is assigned to the '{0}' Compute Ops Management service." -f $Region
 
                 # Check if the device has a valid subscription for Compute Ops Management
-                if ($Devicefound.subscription_tier) {
+                if ($Devicefound.subscription.tier) {
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Device has a valid subscription for Compute Ops Management." | Write-Host -ForegroundColor Green
                     "[{0}] (v{1} {2} - Model:{3} {4} - SN:{5} - SystemROM: {6}) - Device has a valid subscription for Compute Ops Management." -f $iLO.IP, $objStatus.iLOFirmwareVersion, $objStatus.iLOGeneration, $objStatus.ServerModel, $objStatus.ServerGeneration, $objStatus.SerialNumber, $objStatus.ServerSystemROM | Write-Verbose
@@ -3911,7 +3915,7 @@ ForEach ($iLO in $iLOs) {
 
         $DeviceLocation = $Null
                     
-        $DeviceLocation = $Devicefound | Select-Object -ExpandProperty location_name
+        $DeviceLocation = $Devicefound.location.name
                                         
         # Check if the device is already assigned to the location
     
@@ -3955,7 +3959,7 @@ ForEach ($iLO in $iLOs) {
 
         "`t - Location: " | Write-Host -NoNewline
 
-        $DeviceLocation = $Devicefound | Select-Object -ExpandProperty location_name       
+        $DeviceLocation = $Devicefound.location.name
 
         if ($LocationName -ne $DeviceLocation) {
     
