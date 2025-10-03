@@ -45,7 +45,7 @@ June 4, 2025:
  - Security enhancements: The script verifies the authenticity and integrity of the HPEiLOCmdlets and HPECOMCmdlets modules before use (on Windows systems only) to ensure only trusted code is executed.
  - Changed the timing of COM activation key generation: The activation key is now generated just before onboarding each iLO, and its expiration time is set to 1 day (increased from the default 1 hour) to provide more flexibility and reduce the risk of key expiration during large onboarding operations.
 
-.DESCRIPTION
+.DESCRIPTION  
 This PowerShell script is designed to streamline the onboarding process of HPE Gen10 and later servers to HPE Compute Ops Management (COM) by automating the necessary preparations and configurations required for successful integration.
 
 This preparation is essential to ensure that iLOs are ready for COM and can effectively communicate and be managed by the platform, it includes:
