@@ -10,7 +10,7 @@ This preparation is essential to ensure that iLOs are ready for COM and can effe
 
 - **Setting up DNS**: To ensure iLO can reach the cloud platform
 - **Setting up NTP**: To ensure the date and time of iLO are correct, crucial for securing the mutual TLS (mTLS) connections between COM and iLO.
-- **Updating iLO firmware**: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, or iLO6 1.64 or later).
+- **Updating iLO firmware**: To meet the COM minimum iLO firmware requirement to support adding servers with a COM activation key (iLO5 3.09 or later, iLO6 1.64 or later, or iLO7 1.12.00 or later).
 
 This script is designed to be idempotent, meaning you can safely run it multiple times without causing issues or duplicating actions. Here’s how it works:
 
@@ -83,15 +83,17 @@ The script can be run with the following parameters:
 
 The script includes a comprehensive "What's New" section in the header that documents all recent updates and improvements. Key highlights include:
 
-- **July 16, 2025**: Extended the logic for A55 or A56 ROM family servers to handle compatibility with iLO firmware versions. Now if iLO 1.62 or earlier is detected with any ROM version, the script will use the workspace ID onboarding method.
-- **July 15, 2025**: Fixed activation key collection issues when multiple keys were available and ensured proper iLO disconnection from COM after device removal when no valid subscription key was found, preventing future onboarding failures.
-- **July 11, 2025**: Enhanced script reliability and validation by adding retry logic for iLO chassis information retrieval, implementing comprehensive post-onboarding verification of server presence and subscription status, optimizing DNS configuration handling for DHCP-managed settings, and improving tagging efficiency to prevent redundant updates.
-- **July 9, 2025**: Enhanced script reliability by adding connection retry logic and activation key compatibility validation for server onboarding.
-- **July 8, 2025**: Added a new feature to the script that allows users to specify the subscription tier and whether to include evaluation subscriptions. This provides more flexibility in selecting the appropriate COM subscription for onboarding.
-- **July 2, 2025**: Added many improvements to the entire script. Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script. Improved on-screen reporting for "Unsupported/Skipped" servers.
-- **July 1, 2025**: General improvements, bug fixes, and enhanced compatibility for A55/A56 server hardware platforms (Gen11)
-- **June 10, 2025**: Fixed COM activation key assignment and subscription validation issues
-- **June 4, 2025**: Improved session reliability, enhanced documentation, and security enhancements
+- **November 27, 2025 (v2.11.0)**: Major release with SAML Single Sign-On (SSO) authentication support for enterprise identity providers (Okta, Microsoft Entra ID, PingID) added in HPECOMCmdlets v1.0.18, iLO7 firmware update capability (minimum v1.12.00 for Gen12 servers), critical tag logging bug fix, centralized logging infrastructure with Write-iLOLog function, script version tracking with startup banner, enhanced configuration validation for authentication and network parameters, and comprehensive code quality improvements.
+- **October 3, 2025 (v2.10.0)**: Updated for HPECOMCmdlets v1.0.16 compatibility, removed -serialNumber parameter, and added -RemoveExistingiLOProxySettings parameter to improve onboarding reliability.
+- **July 16, 2025 (v2.9.0)**: Extended the logic for A55 or A56 ROM family servers to handle compatibility with iLO firmware versions. Now if iLO 1.62 or earlier is detected with any ROM version, the script will use the workspace ID onboarding method.
+- **July 15, 2025 (v2.8.0)**: Fixed activation key collection issues when multiple keys were available and ensured proper iLO disconnection from COM after device removal when no valid subscription key was found, preventing future onboarding failures.
+- **July 11, 2025 (v2.7.0)**: Enhanced script reliability and validation by adding retry logic for iLO chassis information retrieval, implementing comprehensive post-onboarding verification of server presence and subscription status, optimizing DNS configuration handling for DHCP-managed settings, and improving tagging efficiency to prevent redundant updates.
+- **July 9, 2025 (v2.6.0)**: Enhanced script reliability by adding connection retry logic and activation key compatibility validation for server onboarding.
+- **July 8, 2025 (v2.5.0)**: Added a new feature to the script that allows users to specify the subscription tier and whether to include evaluation subscriptions. This provides more flexibility in selecting the appropriate COM subscription for onboarding.
+- **July 2, 2025 (v2.4.0)**: Added many improvements to the entire script. Enhanced the summary output to display the number of successful, failed, warning, and skipped servers at the end of the script. Improved on-screen reporting for "Unsupported/Skipped" servers.
+- **July 1, 2025 (v2.3.0)**: General improvements, bug fixes, and enhanced compatibility for A55/A56 server hardware platforms (Gen11)
+- **June 10, 2025 (v2.2.0)**: Fixed COM activation key assignment and subscription validation issues
+- **June 4, 2025 (v2.1.0)**: Improved session reliability, enhanced documentation, and security enhancements
 
 For detailed information about all changes and improvements, refer to the `.WHATSNEW` section in the script header.
 
@@ -158,14 +160,16 @@ For detailed information about all changes and improvements, refer to the `.WHAT
    **Required configuration**:
 
    `$iLOcsvPath` - Path to your CSV file containing the iLO details   
-   `$iLO5binFile` and `$iLO6binFile` - Path to the iLO firmware flash files for iLO5 and iLO6   
+   `$iLO5binFile`, `$iLO6binFile`, and `$iLO7binFile` - Path to the iLO firmware flash files for iLO5, iLO6, and iLO7   
    `$iLOUserName` - iLO administrator account username (only needed if missing from the CSV file)    
    `$WorkspaceName` - Your HPE GreenLake workspace name where the COM instance is provisioned  
    `$Region` - Your COM instance region  
-   `$HPEAccount` - Your HPE GreenLake account email with HPE GreenLake and COM administrative privileges  
-   `$OktaSSOEmail` - Set to $true if using @HPE.com email. Note that SSO is available for users with an hpe.com email address only   
+   Account (choose one option):
+   - `$HPEAccount` - Your HPE GreenLake account email with HPE GreenLake and COM administrative privileges  
+   - `$SSOAccount` - Your SSO account email with HPE GreenLake and COM administrative privileges (requires HPECOMCmdlets v1.0.18 or later)  
+   
    `$SubscriptionTier` - Set to 'PROLIANT' or 'ALLETRA' based on your device type  
-   `$UseEval `- Set to $true to include evaluation subscriptions  
+   `$UseEval` - Set to $true to include evaluation subscriptions  
 
    **Optional configuration**:
 
