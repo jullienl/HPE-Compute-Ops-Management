@@ -159,31 +159,28 @@ For detailed information about all changes and improvements, refer to the `.WHAT
 
    **Required configuration**:
 
-   `$iLOcsvPath` - Path to your CSV file containing the iLO details   
-   `$iLO5binFile`, `$iLO6binFile`, and `$iLO7binFile` - Path to the iLO firmware flash files for iLO5, iLO6, and iLO7   
-   `$iLOUserName` - iLO administrator account username (only needed if missing from the CSV file)    
-   `$WorkspaceName` - Your HPE GreenLake workspace name where the COM instance is provisioned  
-   `$Region` - Your COM instance region  
-   Account (choose one option):
-   - `$HPEAccount` - Your HPE GreenLake account email with HPE GreenLake and COM administrative privileges  
-   - `$SSOAccount` - Your SSO account email with HPE GreenLake and COM administrative privileges (requires HPECOMCmdlets v1.0.18 or later)  
-   
-   `$SubscriptionTier` - Set to 'PROLIANT' or 'ALLETRA' based on your device type  
-   `$UseEval` - Set to $true to include evaluation subscriptions  
+   - `$iLOcsvPath` - Path to your CSV file containing the iLO details   
+   - `$iLO5binFile`, `$iLO6binFile`, and `$iLO7binFile` - Path to the iLO firmware flash files for iLO5, iLO6, and iLO7   
+   - `$iLOUserName` - iLO administrator account username (only needed if missing from the CSV file)    
+   - `$WorkspaceName` - Your HPE GreenLake workspace name where the COM instance is provisioned  
+   - `$Region` - Your COM instance region     
+   - Account (choose one option):
+      - `$HPEAccount` - Your HPE GreenLake account email with HPE GreenLake and COM administrative privileges  
+      - `$SSOAccount` - Your SSO account email with HPE GreenLake and COM administrative privileges (requires HPECOMCmdlets v1.0.18 or later)  
+   - `$SubscriptionTier` - Set to 'PROLIANT' or 'ALLETRA' based on your device type  
+   - `$UseEval` - Set to $true to include evaluation subscriptions  
 
    **Optional configuration**:
 
-   `$DNSservers` and `$DNStypes` - DNS server configuration to configure in iLO
-   `$SNTPservers` - Time synchronization servers to configure in iLO
-   `$WebProxyServer`, `$WebProxyPort`, `$WebProxyUsername`, `$WebProxyPassword` - Web proxy settings to configure in iLO  
-   `$SecureGateway `- Secure Gateway FQDN (alternative to web proxy)  
-   - The Secure Gateway must be pre-configured in your COM instance before running this script.  
-   - You cannot use both web proxy variables and Secure Gateway variables simultaneously.    
-
-   `$LocationName` - Location assignment for devices  
-   - The location must be created in the HPE GreenLake workspace before running this script.
-   
-   `$Tags` - Custom tags to assign to devices   
+   - `$DNSservers` and `$DNStypes` - DNS server configuration to configure in iLO
+   - `$SNTPservers` - Time synchronization servers to configure in iLO
+   - `$WebProxyServer`, `$WebProxyPort`, `$WebProxyUsername`, `$WebProxyPassword` - Web proxy settings to configure in iLO  
+   - `$SecureGateway `- Secure Gateway FQDN (alternative to web proxy)  
+      - The Secure Gateway must be pre-configured in your COM instance before running this script.  
+      - You cannot use both web proxy variables and Secure Gateway variables simultaneously.    
+   - `$LocationName` - Location assignment for devices  
+      - The location must be created in the HPE GreenLake workspace before running this script.
+   - `$Tags` - Custom tags to assign to devices   
 
    All these variables are clearly marked and documented in the "Variables definition" section for easy customization.
 
