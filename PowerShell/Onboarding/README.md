@@ -20,6 +20,9 @@ This script is designed to be idempotent, meaning you can safely run it multiple
 
 This approach ensures that running the script repeatedly will not disrupt existing configurations or connections. It only applies changes where needed, making it safe and efficient for ongoing management or troubleshooting.
 
+> **IMPORTANT**: Up to 1000 servers can be added every 24 hours. To add more than 1000 servers in a 24 hour period, contact [Product Support](https://support.hpe.com/hpesc/public/docDisplay?docId=sd00001293en_us&page=GUID-C9F304AA-AFA9-4B55-81AD-D70F02F3E604.html) and enter the following subject: **RDA server support**.
+
+
 The script requires a CSV file and supports two options for iLO credentials:
 
 1. All iLOs use the same account username and password. In this case, provide a CSV file with a header "IP" and a list of iLO IP addresses or resolvable hostnames to be connected to COM:
