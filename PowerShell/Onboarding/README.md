@@ -78,6 +78,7 @@ The script can be run with the following parameters:
 - `Check`: Switch to check the COM instance, subscription, location, and iLO settings without making any changes to the iLO settings. Useful for pre-checking before onboarding.
 - `SkipCertificateValidation`: Switch to bypass certificate validation when connecting to iLO. Use with caution. This switch is only intended to be used against known hosts using a self-signed certificate.
 - `DisconnectiLOfromOneView`: Switch to disconnect the iLO from HPE OneView before onboarding to COM.
+- `PromptForSubscriptionKey`: Switch to interactively select the subscription key to use. When specified, the script displays all available COM subscriptions (key, tier, eval status, available and total licenses) and prompts you to enter the key to use. This overrides the automatic selection based on `$SubscriptionTier` and `$UseEval`.
 - `Verbose`: Switch to enable verbose output.
 
 **Note:** The script requires the HPEiLOCmdlets and HPECOMCmdlets PowerShell modules to connect to iLOs and HPE GreenLake, respectively. The two modules are automatically installed if not already present.
@@ -86,6 +87,7 @@ The script can be run with the following parameters:
 
 The script includes a comprehensive "What's New" section in the header that documents all recent updates and improvements. Key highlights include:
 
+- **May 7, 2026 (v2.12.0)**: Added `-PromptForSubscriptionKey` switch parameter to interactively display all available COM subscriptions and let the user choose the subscription key to use for onboarding (overriding the automatic `$SubscriptionTier`/`$UseEval` selection). Added `#Requires -Version 7.0` directive to enforce PowerShell 7 at parse time, replacing the manual version check. Fixed a hard-stop on insufficient licenses: the script now exits immediately when the selected subscription does not have enough seats for all iLOs in the CSV, preventing partial onboarding runs.
 - **November 27, 2025 (v2.11.0)**: Major release with SAML Single Sign-On (SSO) authentication support for enterprise identity providers (Okta, Microsoft Entra ID, PingID) added in HPECOMCmdlets v1.0.18, iLO7 firmware update capability (minimum v1.12.00 for Gen12 servers), critical tag logging bug fix, centralized logging infrastructure with Write-iLOLog function, script version tracking with startup banner, enhanced configuration validation for authentication and network parameters, and comprehensive code quality improvements.
 - **October 3, 2025 (v2.10.0)**: Updated for HPECOMCmdlets v1.0.16 compatibility, removed -serialNumber parameter, and added -RemoveExistingiLOProxySettings parameter to improve onboarding reliability.
 - **July 16, 2025 (v2.9.0)**: Extended the logic for A55 or A56 ROM family servers to handle compatibility with iLO firmware versions. Now if iLO 1.62 or earlier is detected with any ROM version, the script will use the workspace ID onboarding method.
@@ -170,8 +172,8 @@ For detailed information about all changes and improvements, refer to the `.WHAT
    - Account (choose one option):
       - `$HPEAccount` - Your HPE GreenLake account email with HPE GreenLake and COM administrative privileges  
       - `$SSOAccount` - Your SSO account email with HPE GreenLake and COM administrative privileges (requires HPECOMCmdlets v1.0.18 or later)  
-   - `$SubscriptionTier` - Set to 'PROLIANT' or 'ALLETRA' based on your device type  
-   - `$UseEval` - Set to $true to include evaluation subscriptions  
+   - `$SubscriptionTier` - Set to 'PROLIANT' or 'ALLETRA' based on your device type (ignored when `-PromptForSubscriptionKey` is used)  
+   - `$UseEval` - Set to $true to include evaluation subscriptions (ignored when `-PromptForSubscriptionKey` is used)  
 
    **Optional configuration**:
 
