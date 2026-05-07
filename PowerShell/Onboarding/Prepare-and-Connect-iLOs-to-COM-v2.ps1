@@ -3,6 +3,9 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+v2.12.0 - May 7, 2026
+ - Added interactive subscription key selection: New `-PromptForSubscriptionKey` switch parameter allows users to view all available COM subscriptions (key, tier, eval status, available licenses) and manually choose the subscription key to use for onboarding, instead of relying on automatic selection based on `$SubscriptionTier` and `$UseEval`. When this switch is active, `$SubscriptionTier` and `$UseEval` are ignored.
+ - Added `#Requires -Version 7.0` directive to enforce PowerShell 7. Removed the now-redundant manual PS7 version check from the Preparation region.
 v2.11.0 - November 27, 2025
  - Enhanced authentication flexibility: Added support for SAML Single Sign-On (SSO) authentication in addition to standard HPE GreenLake credentials, enabling seamless integration with enterprise identity providers (Okta, Microsoft Entra ID, PingID).
      - This enhancement requires HPECOMCmdlets v1.0.18 or later and provides organizations with more secure, centralized authentication options for HPE GreenLake access.
@@ -108,6 +111,7 @@ The script can be run with the following parameters:
 - `Check`: Switch to check the COM instance, subscription, location, and iLO settings without making any changes to the iLO settings. Useful for pre-checking before onboarding.
 - `SkipCertificateValidation`: Switch to bypass certificate validation when connecting to iLO. Use with caution. This switch is only intended to be used against known hosts using a self-signed certificate.
 - `DisconnectiLOfromOneView`: Switch to disconnect the iLO from HPE OneView before onboarding to COM.
+- `PromptForSubscriptionKey`: Switch to interactively select a subscription key. When specified, the script displays all available COM subscriptions with their tier, evaluation status, and available license count, then prompts the user to enter the key to use. This overrides the automatic selection based on `$SubscriptionTier` and `$UseEval`.
 - `Verbose`: Switch to enable verbose output.
 
 Note: The script requires the HPEiLOCmdlets and HPECOMCmdlets PowerShell modules to connect to iLOs and HPE GreenLake, respectively. The two modules are automatically installed if not already present.
@@ -458,7 +462,6 @@ Note: The script generates a CSV file with the status of the operation, includin
 Disclaimer: The script is provided as-is and is not officially supported by HPE. It is recommended to test the script in a non-production environment before running it in a production environment. Use the script at your own risk.
 
   Author: lionel.jullien@hpe.com
-  Date:   July 2025
   Script source: https://github.com/jullienl/HPE-Compute-Ops-Management/blob/main/PowerShell/Onboarding/Prepare-and-Connect-iLOs-to-COM-v2.ps1
     
 #################################################################################
@@ -486,6 +489,7 @@ Disclaimer: The script is provided as-is and is not officially supported by HPE.
 #################################################################################
 #>
 
+#Requires -Version 7.0
 
 param (
     
@@ -494,6 +498,8 @@ param (
     [switch]$SkipCertificateValidation,
     
     [switch]$DisconnectiLOfromOneView,
+
+    [switch]$PromptForSubscriptionKey,
 
     [switch]$Verbose
     
@@ -561,6 +567,9 @@ $HPEAccount = "user@company.com"
 # ========================================================================================================
 
 # The script will automatically select the first available subscription key that matches your criteria.
+# NOTE: If you run the script with the -PromptForSubscriptionKey switch, $SubscriptionTier and $UseEval
+# are ignored. Instead, the script will display all available subscriptions and interactively prompt
+# you to enter the subscription key to use.
 
 # You can control which subscription tier and evaluation status to use:
 #   - $SubscriptionTier: Set to 'PROLIANT' or 'ALLETRA' to match your device type.
@@ -659,21 +668,14 @@ $script:ChassisInfoRetryDelay = 2       # seconds between attempts
 # SCRIPT VERSION INFORMATION
 # ========================================================================================================
 
-$script:ScriptVersion = "2.11.0"
+$script:ScriptVersion = "2.12.0"
 $script:ScriptName = "Prepare-and-Connect-iLOs-to-COM"
-$script:LastModified = "November 27, 2025"
+$script:LastModified = "May 7, 2026"
 $script:Author = "Hewlett Packard Enterprise"
 
 #EndRegion
 
 #Region -------------------------------------------------------- Preparation -----------------------------------------------------------------------------------------
-
-# Check if the script is running in PowerShell 7 
-if ($PSVersionTable.PSVersion.Major -ne 7) {
-    Write-Host "Error: PowerShell 7 is required to run this script. Please launch this script in a PowerShell 7 session and try again." -ForegroundColor Red
-    Read-Host -Prompt "Hit return to close"    
-    exit
-}
 
 # Display script banner with version information
 Write-Host "`n========================================================================================================" -ForegroundColor Cyan
@@ -1309,22 +1311,65 @@ try {
 
     $AvailableCOMSubscription = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
     
-    # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions
-    $AvailableCOMSubscription = $AvailableCOMSubscription | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval }
+    if ($PromptForSubscriptionKey) {
 
-    $TotalCount = ($AvailableCOMSubscription | Select-Object -ExpandProperty AvailableQuantity) | Measure-Object -Sum | Select-Object -ExpandProperty Sum
+        # Display all available subscriptions and prompt the user to choose one
+        if (-not $AvailableCOMSubscription) {
+            "[Workspace: {0}] - No subscriptions with available licenses found. Please check your Compute Ops Management subscription and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
+            Read-Host -Prompt "Hit return to close"
+            exit
+        }
+
+        Write-Host "`n  Available COM subscriptions:" -ForegroundColor Cyan
+        $tableOutput = $AvailableCOMSubscription | Select-Object `
+        @{N = 'Key'; E = { $_.key } }, `
+        @{N = 'Tier'; E = { $_.tier } }, `
+        @{N = 'IsEval'; E = { $_.isEval } }, `
+        @{N = 'Available'; E = { $_.AvailableQuantity } }, `
+        @{N = 'TotalCount'; E = { $_.quantity } } `
+        | Format-Table -AutoSize | Out-String
+        ($tableOutput.TrimEnd() -split "`n") | ForEach-Object { Write-Host "  $_" }
+
+        $script:SelectedSubscriptionKey = $null
+        do {
+            Write-Host ""
+            $enteredKey = (Read-Host "  Enter the subscription key to use for onboarding").Trim()
+            $matchedSub = $AvailableCOMSubscription | Where-Object { $_.key -eq $enteredKey }
+            if ($matchedSub) {
+                $script:SelectedSubscriptionKey = $enteredKey
+                Write-Host "  Subscription key '$script:SelectedSubscriptionKey' selected (Tier: $($matchedSub.tier), Available licenses: $($matchedSub.AvailableQuantity))." -ForegroundColor Green
+            }
+            else {
+                Write-Host "  Invalid subscription key. Please enter a key from the list above." -ForegroundColor Yellow
+            }
+        } while (-not $script:SelectedSubscriptionKey)
+
+        # Scope $AvailableCOMSubscription and $TotalCount to the selected subscription
+        $AvailableCOMSubscription = $matchedSub
+        $TotalCount = [int]$matchedSub.AvailableQuantity
+
+    }
+    else {
+
+        # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions
+        $AvailableCOMSubscription = $AvailableCOMSubscription | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval }
+
+        $TotalCount = ($AvailableCOMSubscription | Select-Object -ExpandProperty AvailableQuantity) | Measure-Object -Sum | Select-Object -ExpandProperty Sum
+    }
         
     if (-not $Check) {
 
-        # Check to enough license available for the amount of iLOs
+        # Check if enough license are available for the amount of iLOs
         if ($AvailableCOMSubscription -and $TotalCount -lt $iLOs.Count) {
-            "[Workspace: {0}] - Not enough licenses available ({1}) for the amount of iLOs ({2}). Please check your Compute Ops Management subscription and try again." -f $WorkspaceName, $TotalCount, $iLOs.Count | Write-Host -ForegroundColor Red
+            "`n[Workspace: {0}] - Not enough licenses available ({1}) for the amount of iLOs ({2}). Please check your Compute Ops Management subscription and try again." -f $WorkspaceName, $TotalCount, $iLOs.Count | Write-Host -ForegroundColor Red
+            Read-Host -Prompt "Hit return to close"
+            exit
         }
         elseif ($AvailableCOMSubscription -and $TotalCount -ge $iLOs.Count) {
-            "[Workspace: {0}] - Sufficient licenses available ({1}) for the number of iLOs ({2})." -f $WorkspaceName, $TotalCount, $iLOs.Count | Write-Host -f Green
+            "`n[Workspace: {0}] - Sufficient licenses available ({1}) for the number of iLOs ({2})." -f $WorkspaceName, $TotalCount, $iLOs.Count | Write-Host -ForegroundColor Green
         }
         else {
-            "[Workspace: {0}] - No subscription with available license found. Please check your Compute Ops Management subscription and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
+            "`n[Workspace: {0}] - No subscription with available license found. Please check your Compute Ops Management subscription and try again." -f $WorkspaceName | Write-Host -ForegroundColor Red
             Read-Host -Prompt "Hit return to close" 
             exit
         }
@@ -1354,7 +1399,9 @@ catch {
     "[Workspace: {0}] - Error checking Compute Ops Management subscription. Status: {1}" -f $WorkspaceName, $_ | Write-Host -ForegroundColor Red
     Read-Host -Prompt "Hit return to close" 
     exit
-}#EndRegion       
+}
+
+#EndRegion       
 
 #Region -------------------------------------------------------- Checking COM location (if defined) -------------------------------------------------------------------------------------
     
@@ -3471,10 +3518,15 @@ ForEach ($iLO in $iLOs) {
                     Write-iLOLog -iLOStatus $objStatus -Message "No existing COM $keyType activation key found matching criteria. Generating a new one..."
 
                     # Get a valid subscription key for the server
-                    $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
-                     
-                    # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
-                    $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
+                    if ($PromptForSubscriptionKey -and $script:SelectedSubscriptionKey) {
+                        $SubscriptionKey = $script:SelectedSubscriptionKey
+                    }
+                    else {
+                        $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
+                        
+                        # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
+                        $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
+                    }
 
                     if (-not $SubscriptionKey) {      
                         "`t`t - Status: " | Write-Host -NoNewline
@@ -3544,10 +3596,15 @@ ForEach ($iLO in $iLOs) {
                         # Generating a new activation key to match the server model
                         
                         # Get a valid subscription key for the server
-                        $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
-                        
-                        # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
-                        $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
+                        if ($PromptForSubscriptionKey -and $script:SelectedSubscriptionKey) {
+                            $SubscriptionKey = $script:SelectedSubscriptionKey
+                        }
+                        else {
+                            $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
+                            
+                            # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
+                            $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
+                        }
 
                         if (-not $SubscriptionKey) {      
                             "`t`t - Status: " | Write-Host -NoNewline
@@ -3728,10 +3785,15 @@ ForEach ($iLO in $iLOs) {
                 try {
 
                     # Get a valid subscription key for the server
-                    $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
+                    if ($PromptForSubscriptionKey -and $script:SelectedSubscriptionKey) {
+                        $SubscriptionKey = $script:SelectedSubscriptionKey
+                    }
+                    else {
+                        $SubscriptionKey = Get-HPEGLSubscription -ShowDeviceSubscriptions -ShowWithAvailableQuantity -ShowValid -FilterBySubscriptionType Server -Verbose:$Verbose -ErrorAction Stop
                         
-                    # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
-                    $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
+                        # Filter out subscriptions that are not for Compute Ops Management or are evaluation subscriptions and select the first one
+                        $SubscriptionKey = $SubscriptionKey | Where-Object { $_.tier -match $SubscriptionTier -and $_.isEval -eq $UseEval } | Select-Object -First 1 -ExpandProperty key
+                    }
 
                     "`t`t - Status: " | Write-Host -NoNewline
                     "Compute Ops Management service subscription found: {0}" -f $SubscriptionKey | Write-Host -ForegroundColor Green
@@ -4299,7 +4361,6 @@ ForEach ($iLO in $iLOs) {
                             $DeviceTagsRemovalStatus = Remove-HPEGLDeviceTagFromDevice -SerialNumber $objStatus.SerialNumber -Tags $FormattedExtraTagsWithoutValue -Verbose:$Verbose -ErrorAction Stop
     
                             if ($DeviceTagsRemovalStatus.Status -eq "Complete") {
-                                "InProgress" | Write-Host -f Yellow
                                 "`t`t - Status: " | Write-Host -NoNewline
                                 "Extra tags '{0}' removed successfully." -f $FormattedExtraTagsWithoutValue | Write-Host -ForegroundColor Green
                                 Write-iLOLog -iLOStatus $objStatus -Message "Extra tags '$FormattedExtraTagsWithoutValue' removed successfully."
