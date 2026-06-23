@@ -3,9 +3,14 @@
 Prepare and Onboard HPE iLOs to Compute Ops Management (COM) with Automated Configuration and Firmware Compliance.
 
 .WHATSNEW
+v2.13.0 - June 16, 2026
+ - Added support for password-based SAML SSO: A federated account that requires a password (Okta, Microsoft Entra ID, PingID) can now be used directly with Option 1 ($HPEAccount) — federation is detected automatically by Connect-HPEGL -Credential, no extra parameters needed. Because this path needs no interactive push/TOTP approval, it is the recommended method for large-scale, unattended onboarding runs. Requires HPECOMCmdlets v1.0.26 or later.
+ - Clarified that Option 2 ($SSOAccount) is specifically for PASSWORDLESS SSO (push/TOTP), which requires an interactive approval at connect time.
+ - Renamed the -SSOEmail parameter to -PasswordlessSSOEmail in the connection logic to match HPECOMCmdlets v1.0.26 (the -SSOEmail alias remains functional for backward compatibility).
 v2.12.0 - May 7, 2026
  - Added interactive subscription key selection: New `-PromptForSubscriptionKey` switch parameter allows users to view all available COM subscriptions (key, tier, eval status, available licenses) and manually choose the subscription key to use for onboarding, instead of relying on automatic selection based on `$SubscriptionTier` and `$UseEval`. When this switch is active, `$SubscriptionTier` and `$UseEval` are ignored.
  - Added `#Requires -Version 7.0` directive to enforce PowerShell 7. Removed the now-redundant manual PS7 version check from the Preparation region.
+ - Fixed a hard-stop on insufficient licenses: the script now exits immediately when the selected subscription does not have enough seats for all iLOs in the CSV, preventing partial onboarding runs.
 v2.11.0 - November 27, 2025
  - Enhanced authentication flexibility: Added support for SAML Single Sign-On (SSO) authentication in addition to standard HPE GreenLake credentials, enabling seamless integration with enterprise identity providers (Okta, Microsoft Entra ID, PingID).
      - This enhancement requires HPECOMCmdlets v1.0.18 or later and provides organizations with more secure, centralized authentication options for HPE GreenLake access.
@@ -552,11 +557,22 @@ $Region = "eu-central"                         # COM instance region (us-west, e
 
 # ⚠️ IMPORTANT: Define ONLY ONE of the following two options. Comment out the one you don't use.
 
-# Option 1: Standard HPE GreenLake account 
+# Option 1: Standard HPE GreenLake account OR password-based SAML SSO account
+# Use this option for:
+#   - A standard (non-SSO) HPE GreenLake username/password account, OR
+#   - A federated (SSO) account that requires a PASSWORD (Okta, Microsoft Entra ID, PingID).
+# In both cases the script connects with Connect-HPEGL -Credential and federation is detected
+# automatically — no extra parameters are needed (password-based SSO requires HPECOMCmdlets v1.0.26+).
+# Because this path needs no interactive push/TOTP approval, it is the recommended method for
+# large-scale, unattended onboarding runs.
 $HPEAccount = "user@company.com"
 
-# Option 2: SAML SSO authentication (Okta, Microsoft Entra ID, PingID)
-# Uncomment the line below and comment out $HPEAccount above to use SSO authentication
+# Option 2: Passwordless SAML SSO authentication (Okta, Microsoft Entra ID, PingID)
+# Use this option ONLY for federated accounts configured for PASSWORDLESS authentication
+# (push notification or TOTP — no password). This path connects with -PasswordlessSSOEmail and
+# requires an INTERACTIVE approval at connect time, so it is not suited to unattended automation.
+# (If your SSO account uses a password, use Option 1 / $HPEAccount instead.)
+# Uncomment the line below and comment out $HPEAccount above to use passwordless SSO authentication.
 # IMPORTANT: SAML SSO must be configured in your HPE GreenLake workspace before using this option
 # For setup instructions, visit: https://jullienl.github.io/Configuring-SAML-SSO-with-HPE-GreenLake-and-Passwordless-Authentication-for-HPECOMCmdlets/
 # $SSOAccount = "user@company.com"
@@ -668,9 +684,9 @@ $script:ChassisInfoRetryDelay = 2       # seconds between attempts
 # SCRIPT VERSION INFORMATION
 # ========================================================================================================
 
-$script:ScriptVersion = "2.12.0"
+$script:ScriptVersion = "2.13.0"
 $script:ScriptName = "Prepare-and-Connect-iLOs-to-COM"
-$script:LastModified = "May 7, 2026"
+$script:LastModified = "June 16, 2026"
 $script:Author = "Hewlett Packard Enterprise"
 
 #EndRegion
@@ -1126,12 +1142,19 @@ catch {
     # If not connected, connect to HPE GreenLake workspace
     try {
         if ($SSOAccount) {
-            # Connect to HPE GreenLake workspace using SAML SSO
-            Write-Verbose "Using SAML SSO authentication with account: $SSOAccount"
-            $GLPConnection = Connect-HPEGL -SSOEmail $SSOAccount -Workspace $WorkspaceName -Verbose:$Verbose
+            # Connect to HPE GreenLake workspace using passwordless SAML SSO (push/TOTP)
+            # The -PasswordlessSSOEmail parameter requires HPECOMCmdlets v1.0.26 or later.
+            $comModuleVersion = (Get-Module HPECOMCmdlets).Version
+            if ($comModuleVersion -lt [version]'1.0.26') {
+                "Error: Passwordless SSO (`$SSOAccount) requires HPECOMCmdlets v1.0.26 or later, but v{0} is loaded. Update with: Update-Module HPECOMCmdlets -Force" -f $comModuleVersion | Write-Host -ForegroundColor Red
+                Read-Host -Prompt "Hit return to close"
+                exit
+            }
+            Write-Verbose "Using passwordless SAML SSO authentication with account: $SSOAccount"
+            $GLPConnection = Connect-HPEGL -PasswordlessSSOEmail $SSOAccount -Workspace $WorkspaceName -Verbose:$Verbose
         }
         else {
-            # Connect using standard HPE GreenLake credentials
+            # Connect using standard HPE GreenLake credentials or password-based SAML SSO (if configured)
             Write-Verbose "Using standard authentication with account: $HPEAccount"
             Write-Host ""
             $HPEAccountSecuredPassword = Read-Host -AsSecureString "Enter password for your HPE GreenLake account '$HPEAccount'"

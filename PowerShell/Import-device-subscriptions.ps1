@@ -14,6 +14,11 @@ Requirements:
         - If using custom roles, ensure the account has the "Devices and Subscription Service Edit" permission.
     - HPE GreenLake workspace already set up.
 
+Note on SSO accounts:
+    - The `HPEAccount` parameter also accepts a federated (SSO) account email. The script connects with
+      `Connect-HPEGL -Credential`, which auto-detects federation, so a password-based SSO account
+      (Okta, Microsoft Entra ID, PingID) works without any extra parameters (requires HPECOMCmdlets v1.0.26 or later).
+
 Usage Instructions:
     1. Run the script in a PowerShell 7 environment with the following parameters:
             - `HPEAccount`: Your HPE GreenLake account email.
@@ -217,7 +222,7 @@ else {
 #Region -------------------------------------------------------- Importing COM subscriptions -------------------------------------------------------------------------------------
 
 
-foreach ($Subscription in $Subscriptions | Select-Object -First 2) {
+foreach ($Subscription in $Subscriptions) {
     
     try {
    
