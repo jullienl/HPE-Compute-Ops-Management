@@ -32,9 +32,9 @@
     for the requested workspace is already active.
 
 .PARAMETER Workspace
-    (Optional) The HPE GreenLake workspace that owns the servers. Used when the script has
-    to establish (or switch) the HPE GreenLake session. If omitted, the current session's
-    workspace is used.
+    (Mandatory) The HPE GreenLake workspace that owns the servers. The script connects to
+    (or switches to) this workspace with a fresh sign-in, and only reuses an existing
+    session when it already targets this same workspace.
 
 .PARAMETER Region
     The COM region code where the servers are connected (e.g. 'eu-central', 'us-west').
@@ -124,15 +124,15 @@
         192.168.0.21  CZ2311004H   Complete
         192.168.1.56  CZJ3100GD9   Complete
 
-        1 server(s) did not complete. Review the Details column above.
+        1 server(s) did not complete the migration. Review the Details column above.
 
 .EXAMPLE
     $iloCred = Get-Credential
-    .\Migrate-DirectToSecureGateway.ps1 -Region us-west -IloCredential $iloCred -SecureGatewayName 'sg01.lab' -IloProxyPort 8080
+    .\Migrate-DirectToSecureGateway.ps1 -Region us-west -Workspace 'Production' -IloCredential $iloCred -SecureGatewayName 'sg01.lab' -IloProxyPort 8080
 
-    Reuses the current HPE GreenLake session (or prompts if none is active) and migrates all
-    Direct-connected servers in us-west through the specific Secure Gateway 'sg01.lab' on
-    port 8080.
+    Reuses the current HPE GreenLake session when it already targets 'Production' (otherwise
+    connects for you), and migrates all Direct-connected servers in us-west through the
+    specific Secure Gateway 'sg01.lab' on port 8080.
 
 .EXAMPLE
     $glCred = Get-Credential
@@ -167,8 +167,8 @@
     - PowerShell 7.0 or later.
     - The HPECOMCmdlets module v1.0.26+ installed (Install-Module HPECOMCmdlets).
     - HPE GreenLake account credentials with access to the workspace that owns the servers.
-      The script connects for you (reusing an existing session when one is already active);
-      pass them with -GLCredential/-Workspace or let it prompt interactively.
+      The script connects for you (reusing an existing session only when it already targets
+      the requested -Workspace); pass credentials with -GLCredential or let it prompt.
     - Compute Ops Management provisioned in the target region.
     - At least one Secure Gateway appliance deployed and online in the target region.
     - Network access from the machine running this script to every target iLO.
@@ -197,7 +197,7 @@ param(
     [ValidateNotNull()]
     [System.Management.Automation.PSCredential]$GLCredential,
 
-    [Parameter()]
+    [Parameter(Mandatory)]
     [ValidateNotNullOrEmpty()]
     [string]$Workspace,
 
@@ -238,9 +238,9 @@ $ErrorActionPreference = 'Stop'
 # --------------------------------------------------------------------------------------
 Write-Host "`n=== HPE COM migration: Direct -> Secure Gateway ('$Region') ===`n" -ForegroundColor Cyan
 
-# Determine whether the current session already targets the requested workspace. If a
-# workspace was supplied, it must match; otherwise any active session is acceptable.
-$sessionValid = $Global:HPEGreenLakeSession -and (-not $Workspace -or $Global:HPEGreenLakeSession.workspaceName -eq $Workspace)
+# Reuse the current session only when it already targets the requested workspace;
+# otherwise establish a fresh session for that workspace.
+$sessionValid = $Global:HPEGreenLakeSession -and $Global:HPEGreenLakeSession.workspaceName -eq $Workspace
 
 if ($sessionValid) {
     Write-Host "HPE GreenLake   : reusing active session ('$($Global:HPEGreenLakeSession.workspaceName)')" -ForegroundColor Green
@@ -251,8 +251,11 @@ else {
         $GLCredential = Get-Credential -Message "HPE GreenLake account credentials"
     }
 
-    $connectGLParams = @{ Credential = $GLCredential }
-    if ($Workspace) { $connectGLParams.Workspace = $Workspace }
+    $connectGLParams = @{
+        Credential                = $GLCredential
+        Workspace                 = $Workspace
+        RemoveExistingCredentials = $true
+    }
 
     try {
         Connect-HPEGL @connectGLParams | Out-Null
@@ -413,3 +416,6 @@ if (-not $Check -and $results) {
 }
 
 Write-Host ""
+
+
+
