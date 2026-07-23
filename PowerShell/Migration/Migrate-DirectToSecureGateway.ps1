@@ -66,7 +66,7 @@
     which is the standard Secure Gateway port.
 
 .PARAMETER ActivationKeyExpirationInHours
-    (Optional) Lifetime of the generated COM activation key, in hours. Defaults to 2.
+    (Optional) Lifetime of the generated COM activation key, in hours. Defaults to 24.
     Valid range is 0.5 (30 minutes) to 168 (7 days).
 
 .PARAMETER SkipCertificateValidation
@@ -81,9 +81,79 @@
     .\Migrate-DirectToSecureGateway.ps1 -Region eu-central -Workspace 'Production' -Check
 
     Previews the migration of every Direct-connected server in eu-central. Connects to HPE
-    GreenLake (reusing an active session, or prompting for credentials), prompts for iLO
-    credentials, auto-selects the first Secure Gateway, and prints a per-iLO WhatIf report
-    without making any change.
+    GreenLake 'Production' workspace (reusing an active session, or prompting for credentials), 
+    prompts for iLO credentials, auto-selects the first Secure Gateway, and prints a per-iLO 
+    WhatIf report without making any change.
+
+    Sample output:
+
+        === HPE COM migration: Direct -> Secure Gateway ('eu-central') ===
+
+        Connecting to HPE GreenLake...
+        HPE GreenLake   : connected ('Production')
+
+        Secure Gateway  : sg01.lj.lab (port 8080)
+
+        Servers to move : 4 Direct-connected server(s)
+
+        name          serialNumber iLOIPAddress  connectionType
+        ----          ------------ ------------  --------------
+        fdz365g11-1   CZJ3100GDB   10.228.75.111 DIRECT
+        HVM-1         CZ2311004G   192.168.0.20  DIRECT
+        RHEL-1.lj.lab CZ2311004H   192.168.0.21  DIRECT
+        RHEL-2.lj.lab CZJ3100GD9   192.168.1.56  DIRECT
+
+        Generating a COM activation key tied to Secure Gateway 'sg01.lj.lab'...
+        Activation key  : generated (valid for 24 h)
+
+        PREVIEW MODE (-Check): no change will be made to the iLOs.
+
+        WARNING: iLO '10.228.75.111': iLO is not reachable. Please ensure you are connected to the iLO network. Cannot display the planned operations.
+        WARNING: iLO '192.168.0.20' [iLO 5 v3.20 - SN: CZ2311004G] - WhatIf report:                                             
+        Validation
+            - iLO network connectivity (ping) : Reachable
+            - iLO authentication / session    : Succeeded
+            - iLO identity                    : iLO 5 v3.20 (SN: CZ2311004G)
+            - Current iLO proxy               : Disabled
+            - Managed by HPE OneView          : No
+            - iLO firmware vs activation key  : Compatible (v3.20 meets the minimum required version)
+
+        Planned operations
+            - COM disconnect (-Force)         : Disconnect the iLO from its current COM connection before reconnecting
+            - Proxy configuration             : Configure web proxy 'sg01.lj.lab:8080'
+            - HPE OneView                     : Leave unchanged (not managed by HPE OneView)
+            - Activation key                  : 'xxxxxxxx'
+            - COM connection                  : Connect using the provided activation key
+        WARNING: iLO '192.168.0.21' [iLO 5 v3.20 - SN: CZ2311004H] - WhatIf report:                                             
+        Validation
+            - iLO network connectivity (ping) : Reachable
+            - iLO authentication / session    : Succeeded
+            - iLO identity                    : iLO 5 v3.20 (SN: CZ2311004H)
+            - Current iLO proxy               : Disabled
+            - Managed by HPE OneView          : No
+            - iLO firmware vs activation key  : Compatible (v3.20 meets the minimum required version)
+
+        Planned operations
+            - COM disconnect (-Force)         : Disconnect the iLO from its current COM connection before reconnecting
+            - Proxy configuration             : Configure web proxy 'sg01.lj.lab:8080'
+            - HPE OneView                     : Leave unchanged (not managed by HPE OneView)
+            - Activation key                  : 'xxxxxxxx'
+            - COM connection                  : Connect using the provided activation key
+        WARNING: iLO '192.168.1.56' [iLO 6 v1.77 - SN: CZJ3100GD9] - WhatIf report:                                             
+        Validation
+            - iLO network connectivity (ping) : Reachable
+            - iLO authentication / session    : Succeeded
+            - iLO identity                    : iLO 6 v1.77 (SN: CZJ3100GD9)
+            - Current iLO proxy               : Disabled
+            - Managed by HPE OneView          : No
+            - iLO firmware vs activation key  : Compatible (v1.77 meets the minimum required version)
+
+        Planned operations
+            - COM disconnect (-Force)         : Disconnect the iLO from its current COM connection before reconnecting
+            - Proxy configuration             : Configure web proxy 'sg01.lj.lab:8080'
+            - HPE OneView                     : Leave unchanged (not managed by HPE OneView)
+            - Activation key                  : 'xxxxxxxx'
+            - COM connection                  : Connect using the provided activation key
 
 .EXAMPLE
     $glCred  = Get-Credential   # HPE GreenLake account
@@ -100,7 +170,9 @@
 
         Connecting to HPE GreenLake...
         HPE GreenLake   : connected ('Production')
+
         Secure Gateway  : sg01.lj.lab (port 8080)
+
         Servers to move : 4 Direct-connected server(s)
 
         name          serialNumber iLOIPAddress  connectionType
@@ -111,7 +183,7 @@
         RHEL-2.lj.lab CZJ3100GD9   192.168.1.56  DIRECT
 
         Generating a COM activation key tied to Secure Gateway 'sg01.lj.lab'...
-        Activation key  : generated (valid for 2 h)
+        Activation key  : generated (valid for 24 h)
 
         Migrating 4 server(s) to the Secure Gateway connection...
 
@@ -320,7 +392,7 @@ else {
     $SecureGatewayName = $SecureGateway.name
 }
 
-Write-Host "Secure Gateway  : $SecureGatewayName (port $IloProxyPort)" -ForegroundColor Green
+Write-Host "`nSecure Gateway  : $SecureGatewayName (port $IloProxyPort)" -ForegroundColor Green
 
 # --------------------------------------------------------------------------------------
 # Step 3 - Retrieve the Direct-connected servers to migrate
@@ -333,13 +405,13 @@ if (-not $DirectServers) {
 }
 
 $serverCount = @($DirectServers).Count
-Write-Host "Servers to move : $serverCount Direct-connected server(s)`n" -ForegroundColor Green
+Write-Host "`nServers to move : $serverCount Direct-connected server(s)`n" -ForegroundColor Green
 $DirectServers | Select-Object name, serialNumber, iLOIPAddress, connectionType | Format-Table -AutoSize
 
 # --------------------------------------------------------------------------------------
 # Step 4 - Generate a COM activation key tied to the Secure Gateway
 # --------------------------------------------------------------------------------------
-Write-Host "Generating a COM activation key tied to Secure Gateway '$SecureGatewayName'..." -ForegroundColor Cyan
+Write-Host "`nGenerating a COM activation key tied to Secure Gateway '$SecureGatewayName'..." -ForegroundColor Cyan
 $ActivationKey = New-HPECOMServerActivationKey -Region $Region -SecureGateway $SecureGatewayName -ExpirationInHours $ActivationKeyExpirationInHours
 
 if (-not $ActivationKey) {
@@ -364,10 +436,10 @@ if ($SkipCertificateValidation) { $connectParams.SkipCertificateValidation = $tr
 if ($Check) { $connectParams.WhatIf = $true }
 
 if ($Check) {
-    Write-Host "PREVIEW MODE (-Check): no change will be made to the iLOs.`n" -ForegroundColor Yellow
+    Write-Host "`nPREVIEW MODE (-Check): no change will be made to the iLOs.`n" -ForegroundColor Yellow
 }
 else {
-    Write-Host "Migrating $serverCount server(s) to the Secure Gateway connection...`n" -ForegroundColor Cyan
+    Write-Host "`nMigrating $serverCount server(s) to the Secure Gateway connection...`n" -ForegroundColor Cyan
 }
 
 if ($PSCmdlet.ParameterSetName -eq 'CsvCredential') {
