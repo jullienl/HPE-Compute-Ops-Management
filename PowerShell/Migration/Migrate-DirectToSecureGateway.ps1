@@ -312,10 +312,10 @@ Write-Host "`n=== HPE COM migration: Direct -> Secure Gateway ('$Region') ===`n"
 
 # Reuse the current session only when it already targets the requested workspace;
 # otherwise establish a fresh session for that workspace.
-$sessionValid = $Global:HPEGreenLakeSession -and $Global:HPEGreenLakeSession.workspaceName -eq $Workspace
+$sessionValid = $Global:HPEGreenLakeSession -and $Global:HPEGreenLakeSession.workspace -eq $Workspace -and $Global:HPEGreenLakeSession.IsValid
 
 if ($sessionValid) {
-    Write-Host "HPE GreenLake   : reusing active session ('$($Global:HPEGreenLakeSession.workspaceName)')" -ForegroundColor Green
+    Write-Host "HPE GreenLake   : reusing active session ('$($Global:HPEGreenLakeSession.workspace)')" -ForegroundColor Green
 }
 else {
     Write-Host "Connecting to HPE GreenLake..." -ForegroundColor Cyan
@@ -336,7 +336,7 @@ else {
         Write-Error "Failed to connect to HPE GreenLake: $($_.Exception.Message)"
         return
     }
-    Write-Host "HPE GreenLake   : connected ('$($Global:HPEGreenLakeSession.workspaceName)')" -ForegroundColor Green
+    Write-Host "HPE GreenLake   : connected ('$($Global:HPEGreenLakeSession.workspace)')" -ForegroundColor Green
 }
 
 if (-not $Global:HPECOMRegions -or $Region -notin $Global:HPECOMRegions.region) {
