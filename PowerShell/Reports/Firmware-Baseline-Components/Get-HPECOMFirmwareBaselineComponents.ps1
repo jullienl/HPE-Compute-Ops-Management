@@ -10,8 +10,14 @@
 
         1. Connects to HPE GreenLake and validates the Compute Ops Management region.
         2. Retrieves an SPP baseline with Get-HPECOMFirmwareBaseline.
-        3. Resolves the matching public HPE Contents Report online.
-        4. Downloads the report PDF and extracts component rows.
+        3. Resolves the matching public HPE Contents Report online:
+             a. Public https://support.hpe.com/docs/display/public/a00sppdocen_US/spp/assets/config.json confirms
+                the release exists.
+             b. Public https://support.hpe.com/docs/display/public/a00sppdocen_US/spp/assets/gen{generation}.{releaseVersion}.json
+                returns QuickLinks.
+             c. The Contents Report link gives the support document ID.
+        4. Downloads the PDF from https://support.hpe.com/hpesc/public/api/document/{docId} and uses PdfPig to
+           parse the component data.
         5. Prints a summary and optionally exports component data to CSV.
 
     PdfPig assemblies required for PDF extraction must be placed in the script's lib\PdfPig-1.7.0-custom-5 folder.
@@ -56,6 +62,29 @@
 
     Retrieve component details for the specified HPE Service Pack for ProLiant (SPP) and output the data as JSON.
 
+.EXAMPLE
+    $GLCredential = Get-Credential
+    $components = .\Private\Scripts\Report\Get-HPECOMFirmwareBaselineComponents.ps1 -Region eu-central -Workspace 'HPE Mougins' -GLCredential $GLCredential -Generation 12 -ReleaseVersion 2026.07.00.00 -PassThru 
+
+    Retrieve component details for the specified HPE Service Pack for ProLiant (SPP) and store them in the $components variable.
+
+    Count the number of components retrieved:
+    $components.Count     
+    190
+    
+    Get the first component from the $components array:
+    $components[0]   
+        Generation         : 12
+        ReleaseVersion     : 2026.07.00.00
+        Category           : Application - System Management
+        Name               : Integrated Smart Update Tools for Ubuntu Linux x64
+        Version            : 6.8.0.0
+        Filename           : sut-6.8.0-7_amd64.deb
+        UpgradeRequirement : Recommended
+        ReleaseStatus      : new
+        DocumentId         : dp00008215en_us
+        SourceUrl          : https://support.hpe.com/hpesc/public/api/document/dp00008215en_us
+        PageNumber         : 1
 
 .OUTPUTS
     System.Management.Automation.PSCustomObject
@@ -239,18 +268,18 @@ try {
                 if (-not $filename -or $category -match 'Product Category' -or $name -eq 'Description') { continue }
 
                 [void]$components.Add([PSCustomObject]@{
-                    Generation = $Generation
-                    ReleaseVersion = $resolvedVersion
-                    Category = $category
-                    Name = $name
-                    Version = $version
-                    Filename = $filename
-                    UpgradeRequirement = $upgradeRequirement
-                    ReleaseStatus = $releaseStatus
-                    DocumentId = $documentId
-                    SourceUrl = $sourceUrl
-                    PageNumber = $page.Number
-                })
+                        Generation         = $Generation
+                        ReleaseVersion     = $resolvedVersion
+                        Category           = $category
+                        Name               = $name
+                        Version            = $version
+                        Filename           = $filename
+                        UpgradeRequirement = $upgradeRequirement
+                        ReleaseStatus      = $releaseStatus
+                        DocumentId         = $documentId
+                        SourceUrl          = $sourceUrl
+                        PageNumber         = $page.Number
+                    })
             }
         }
     }
