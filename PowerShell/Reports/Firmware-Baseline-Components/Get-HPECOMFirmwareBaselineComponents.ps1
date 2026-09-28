@@ -64,7 +64,7 @@
 
 .EXAMPLE
     $GLCredential = Get-Credential
-    $components = .\Private\Scripts\Report\Get-HPECOMFirmwareBaselineComponents.ps1 -Region eu-central -Workspace 'HPE Mougins' -GLCredential $GLCredential -Generation 12 -ReleaseVersion 2026.07.00.00 -PassThru 
+    $components = .\Get-HPECOMFirmwareBaselineComponents.ps1 -Region eu-central -Workspace 'HPE Mougins' -GLCredential $GLCredential -Generation 12 -ReleaseVersion 2026.07.00.00 -PassThru 
 
     Retrieve component details for the specified HPE Service Pack for ProLiant (SPP) and store them in the $components variable.
 
