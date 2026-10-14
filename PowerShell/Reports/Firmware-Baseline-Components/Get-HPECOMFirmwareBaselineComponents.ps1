@@ -64,13 +64,13 @@
 
 .EXAMPLE
     $GLCredential = Get-Credential
-    $components = .\Get-HPECOMFirmwareBaselineComponents.ps1 -Region eu-central -Workspace 'HPE Mougins' -GLCredential $GLCredential -Generation 12 -ReleaseVersion 2026.07.00.00 -PassThru 
+    $components = .\Get-HPECOMFirmwareBaselineComponents.ps1 -Region eu-central -Workspace Production -GLCredential $GLCredential -Generation 12 -ReleaseVersion 2026.07.00.00 -PassThru 
 
     Retrieve component details for the specified HPE Service Pack for ProLiant (SPP) and store them in the $components variable.
 
     Count the number of components retrieved:
     $components.Count     
-    190
+    288
     
     Get the first component from the $components array:
     $components[0]   
@@ -91,8 +91,22 @@
 
 .NOTES
     Requires the HPECOMCmdlets module and the PdfPig assemblies in the script lib folder (https://github.com/UglyToad/pdfpig).
-    Author : Lionel Jullien (HPE)
-    Module : HPECOMCmdlets
+    Author  : Lionel Jullien (HPE)
+    Module  : HPECOMCmdlets
+    Version : 1.1.0
+
+    Change log
+
+    1.1.0 (2026-10-14)
+        - Fixed filenames that wrap across two lines in the PDF, which were returned with a stray space
+          (for example 'libbnxt_re-237.1.137.0- sles15sp7.x86_64.rpm').
+        - Fixed rows that list two filenames (one per OS release): each filename is now returned in the
+          Filename column, separated by '; ', instead of shifting values into the wrong columns.
+        - Fixed rows split by a page break, which were returned as two partial rows (blank Category and
+          Version) and could lose the end of the product name. They are now merged into one row.
+
+    1.0.0
+        - Initial release.
 
 .LINK
     https://github.com/jullienl/HPE-COM-PowerShell-Library
@@ -222,14 +236,91 @@ try {
 
     $document = [UglyToad.PdfPig.PdfDocument]::Open($pdfPath)
     $components = [System.Collections.ArrayList]::new()
+
+    # PDF line-wraps always break mid-token at a trailing hyphen (verified against real reports) - concatenate
+    # those directly instead of inserting a space, so wrapped filenames/versions are reconstructed correctly.
+    function Join-PdfWrappedText {
+        param([string[]]$Tokens)
+        $sb = [System.Text.StringBuilder]::new()
+        for ($i = 0; $i -lt $Tokens.Count; $i++) {
+            if ($i -gt 0) {
+                $previous = $Tokens[$i - 1]
+                if (-not ($previous.Length -gt 1 -and $previous.EndsWith('-'))) {
+                    [void]$sb.Append(' ')
+                }
+            }
+            [void]$sb.Append($Tokens[$i])
+        }
+        return $sb.ToString()
+    }
+
+    function New-SppComponent {
+        param($Row)
+        $category = (Join-PdfWrappedText -Tokens @($Row.Category)).Trim()
+        $name = (Join-PdfWrappedText -Tokens @($Row.Name)).Trim()
+        # A remaining space after hyphen-aware joining means two distinct filenames were present in this row
+        $filename = (Join-PdfWrappedText -Tokens @($Row.Filename)).Trim() -replace '\s+', '; '
+        if (-not $filename -or $category -match 'Product Category' -or $name -eq 'Description') { return }
+
+        [PSCustomObject]@{
+            Generation         = $Generation
+            ReleaseVersion     = $resolvedVersion
+            Category           = $category
+            Name               = $name
+            Version            = (Join-PdfWrappedText -Tokens @($Row.Version)).Trim()
+            Filename           = $filename
+            UpgradeRequirement = (Join-PdfWrappedText -Tokens @($Row.UpgradeRequirement)).Trim()
+            ReleaseStatus      = (Join-PdfWrappedText -Tokens @($Row.ReleaseStatus)).Trim()
+            DocumentId         = $documentId
+            SourceUrl          = $sourceUrl
+            PageNumber         = $Row.PageNumber
+        }
+    }
+
+    # The Upgrade Requirement / Filename / Release Status boundary is derived from the page's own header word
+    # positions instead of the fixed 530/740 pixel values: a wrapped filename's continuation text can render a
+    # few points left of the original fixed boundary, misclassifying it as Upgrade Requirement. The Category/Name/
+    # Version boundaries are left untouched since they already match the real layout.
+    $dynamicHeaderLabels = @{
+        'Upgrade'     = 'UpgradeRequirement'
+        'Requirement' = 'UpgradeRequirement'
+        'Filename'    = 'Filename'
+        'Release'     = 'ReleaseStatus'
+        'Status'      = 'ReleaseStatus'
+    }
+    $upgradeRequirementUpper = 530.0
+    $filenameUpper = 740.0
+    $dynamicBoundsResolved = $false
+    # The last row seen stays open until the next row starts, because a row split by a page break continues at the top of the next page
+    $pendingRow = $null
+
     try {
         foreach ($page in $document.GetPages()) {
+            $isFirstRowOnPage = $true
             $words = @($page.GetWords()) | Sort-Object { $_.BoundingBox.Bottom }, { $_.BoundingBox.Left } -Descending:$false
             $headerWords = @($words | Where-Object {
                     $_.Text -in @('Product', 'Category', 'Description', 'Version', 'Requirement', 'Filename', 'Release', 'Status')
                 })
             $headerBottom = ($headerWords | Measure-Object -Property { $_.BoundingBox.Bottom } -Minimum).Minimum
             if ($null -eq $headerBottom) { $headerBottom = [double]::PositiveInfinity }
+
+            if (-not $dynamicBoundsResolved) {
+                $dynamicAnchors = @{}
+                foreach ($headerWord in $headerWords) {
+                    if ($dynamicHeaderLabels.ContainsKey($headerWord.Text)) {
+                        $col = $dynamicHeaderLabels[$headerWord.Text]
+                        $left = [double]$headerWord.BoundingBox.Left
+                        if (-not $dynamicAnchors.ContainsKey($col) -or $left -lt $dynamicAnchors[$col]) {
+                            $dynamicAnchors[$col] = $left
+                        }
+                    }
+                }
+                if ($dynamicAnchors.ContainsKey('UpgradeRequirement') -and $dynamicAnchors.ContainsKey('Filename') -and $dynamicAnchors.ContainsKey('ReleaseStatus')) {
+                    $upgradeRequirementUpper = ($dynamicAnchors['UpgradeRequirement'] + $dynamicAnchors['Filename']) / 2
+                    $filenameUpper = ($dynamicAnchors['Filename'] + $dynamicAnchors['ReleaseStatus']) / 2
+                    $dynamicBoundsResolved = $true
+                }
+            }
 
             $lines = [System.Collections.ArrayList]::new()
             foreach ($word in $words) {
@@ -257,30 +348,40 @@ try {
             }
 
             foreach ($logicalRow in $logicalRows) {
-                $rowWords = @($logicalRow.Lines | ForEach-Object Words)
-                $category = (($rowWords | Where-Object { $_.BoundingBox.Left -lt 100 } | Sort-Object @{ Expression = { $_.BoundingBox.Bottom }; Descending = $true }, @{ Expression = { $_.BoundingBox.Left }; Descending = $false }).Text -join ' ').Trim()
-                $name = (($rowWords | Where-Object { $_.BoundingBox.Left -ge 100 -and $_.BoundingBox.Left -lt 250 } | Sort-Object @{ Expression = { $_.BoundingBox.Bottom }; Descending = $true }, @{ Expression = { $_.BoundingBox.Left }; Descending = $false }).Text -join ' ').Trim()
-                $version = (($rowWords | Where-Object { $_.BoundingBox.Left -ge 300 -and $_.BoundingBox.Left -lt 380 } | Sort-Object @{ Expression = { $_.BoundingBox.Bottom }; Descending = $true }, @{ Expression = { $_.BoundingBox.Left }; Descending = $false }).Text -join ' ').Trim()
-                $upgradeRequirement = (($rowWords | Where-Object { $_.BoundingBox.Left -ge 380 -and $_.BoundingBox.Left -lt 530 } | Sort-Object @{ Expression = { $_.BoundingBox.Bottom }; Descending = $true }, @{ Expression = { $_.BoundingBox.Left }; Descending = $false }).Text -join ' ').Trim()
-                $filename = (($rowWords | Where-Object { $_.BoundingBox.Left -ge 530 -and $_.BoundingBox.Left -lt 740 } | Sort-Object @{ Expression = { $_.BoundingBox.Bottom }; Descending = $true }, @{ Expression = { $_.BoundingBox.Left }; Descending = $false }).Text -join ' ').Trim()
-                $releaseStatus = (($rowWords | Where-Object { $_.BoundingBox.Left -ge 740 } | Sort-Object @{ Expression = { $_.BoundingBox.Bottom }; Descending = $true }, @{ Expression = { $_.BoundingBox.Left }; Descending = $false }).Text -join ' ').Trim()
+                $orderedWords = @($logicalRow.Lines | ForEach-Object Words) | Sort-Object @{ Expression = { $_.BoundingBox.Bottom }; Descending = $true }, @{ Expression = { $_.BoundingBox.Left }; Descending = $false }
 
-                if (-not $filename -or $category -match 'Product Category' -or $name -eq 'Description') { continue }
+                $row = [PSCustomObject]@{
+                    PageNumber         = $page.Number
+                    Category           = @($orderedWords | Where-Object { $_.BoundingBox.Left -lt 100 } | ForEach-Object Text)
+                    Name               = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge 100 -and $_.BoundingBox.Left -lt 250 } | ForEach-Object Text)
+                    Version            = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge 300 -and $_.BoundingBox.Left -lt 380 } | ForEach-Object Text)
+                    UpgradeRequirement = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge 380 -and $_.BoundingBox.Left -lt $upgradeRequirementUpper } | ForEach-Object Text)
+                    Filename           = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge $upgradeRequirementUpper -and $_.BoundingBox.Left -lt $filenameUpper } | ForEach-Object Text)
+                    ReleaseStatus      = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge $filenameUpper } | ForEach-Object Text)
+                }
 
-                [void]$components.Add([PSCustomObject]@{
-                        Generation         = $Generation
-                        ReleaseVersion     = $resolvedVersion
-                        Category           = $category
-                        Name               = $name
-                        Version            = $version
-                        Filename           = $filename
-                        UpgradeRequirement = $upgradeRequirement
-                        ReleaseStatus      = $releaseStatus
-                        DocumentId         = $documentId
-                        SourceUrl          = $sourceUrl
-                        PageNumber         = $page.Number
-                    })
+                $startsNewRow = $row.Category.Count -gt 0
+                $isContinuation = $isFirstRowOnPage -and $pendingRow -and -not $startsNewRow -and $row.Version.Count -eq 0
+                $isFirstRowOnPage = $false
+
+                if ($isContinuation) {
+                    foreach ($column in 'Name', 'Version', 'UpgradeRequirement', 'Filename', 'ReleaseStatus') {
+                        $pendingRow.$column = @($pendingRow.$column) + @($row.$column)
+                    }
+                }
+                elseif ($startsNewRow) {
+                    if ($pendingRow) {
+                        $component = New-SppComponent -Row $pendingRow
+                        if ($component) { [void]$components.Add($component) }
+                    }
+                    $pendingRow = $row
+                }
             }
+        }
+
+        if ($pendingRow) {
+            $component = New-SppComponent -Row $pendingRow
+            if ($component) { [void]$components.Add($component) }
         }
     }
     finally { $document.Dispose() }
