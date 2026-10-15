@@ -122,7 +122,7 @@
 
     Change log
 
-    1.2.0 (2026-10-14)
+    1.2.0 (2026-10-15)
         - Added -IncludeReleaseDate to add the release date of each component (ReleaseDate column).
           Based on the date lookup in Get-SPPDates.ps1 by Zach Bitting. A date is only returned when the
           filename is listed on support.hpe.com, so a component is never given the date of a different product.
