@@ -18,9 +18,14 @@
              c. The Contents Report link gives the support document ID.
         4. Downloads the PDF from https://support.hpe.com/hpesc/public/api/document/{docId} and uses PdfPig to
            parse the component data.
-        5. Prints a summary and optionally exports component data to CSV.
+        5. Optionally (-IncludeReleaseDate), looks up the release date of every component file on
+           support.hpe.com and adds it as a ReleaseDate column.
+        6. Prints a summary and optionally exports component data to CSV.
 
     PdfPig assemblies required for PDF extraction must be placed in the script's lib\PdfPig-1.7.0-custom-5 folder.
+
+    Internet access to support.hpe.com is required to retrieve the component details (Contents Report) and,
+    with -IncludeReleaseDate, the component release dates.
 
 .PARAMETER Region
     COM region code, for example eu-central or us-west.
@@ -45,6 +50,13 @@
 
 .PARAMETER PassThru
     Emits component objects to the pipeline.
+
+.PARAMETER IncludeReleaseDate
+    Adds a ReleaseDate column (yyyy-MM-dd) with the date each component version was released on support.hpe.com.
+    The Contents Report PDF does not contain dates, so this looks up each filename on support.hpe.com and takes
+    the date of the matching version. This takes several minutes because every component file is looked up.
+    Rows that list two filenames get two dates in the same order, separated by '; '. The date is left empty when
+    the filename is not listed on support.hpe.com or when the version is not found for it.
 
 .EXAMPLE
     .\Get-HPECOMFirmwareBaselineComponents.ps1 -Region eu-central -Workspace Production -Generation 12
@@ -86,6 +98,12 @@
         SourceUrl          : https://support.hpe.com/hpesc/public/api/document/dp00008215en_us
         PageNumber         : 1
 
+.EXAMPLE
+    .\Get-HPECOMFirmwareBaselineComponents.ps1 -Region eu-central -Workspace Production -Generation 11 -IncludeReleaseDate -ExportPath .\spp.csv
+
+    Retrieve the components of the latest Gen11 SPP, add the release date of each component, and export everything
+    to a CSV file. A ReleaseDate column such as '2026-08-07' is included for each component.
+
 .OUTPUTS
     System.Management.Automation.PSCustomObject
 
@@ -93,9 +111,35 @@
     Requires the HPECOMCmdlets module and the PdfPig assemblies in the script lib folder (https://github.com/UglyToad/pdfpig).
     Author  : Lionel Jullien (HPE)
     Module  : HPECOMCmdlets
-    Version : 1.1.0
+    Version : 1.2.0
+
+    Contributors
+        Zach Bitting : release date lookup (-IncludeReleaseDate), based on his Get-SPPDates.ps1 script, and
+                       detailed testing and feedback on the Contents Report parsing.
+
+    The release date lookup (-IncludeReleaseDate) relies on the search service behind the HPE support site,
+    which HPE can change without notice.
 
     Change log
+
+    1.2.0 (2026-10-14)
+        - Added -IncludeReleaseDate to add the release date of each component (ReleaseDate column).
+          Based on the date lookup in Get-SPPDates.ps1 by Zach Bitting. A date is only returned when the
+          filename is listed on support.hpe.com, so a component is never given the date of a different product.
+        - Fixed a filename that wraps in the middle of a word being split into two filenames
+          (for example 'Toshiba_MG08Air_TAMG08ADAnG3.fwpk; g' is now 'Toshiba_MG08Air_TAMG08ADAnG3.fwpkg').
+          Only rows that really list two filenames now contain a '; ' separator.
+        - Fixed versions broken by a line wrap (for example '1016.38.0.10 03' is now '1016.38.0.1003'
+          and '06.01.04.215 .0' is now '06.01.04.215.0').
+        - Fixed words cut in the middle by a line wrap in the Category and Name columns (for example
+          'Enhancement s' is now 'Enhancements' and 'D 3710' is now 'D3710').
+        - Fixed truncated versions (for example '(b)', '3' or '.0011' instead of '14.4.624.1 (b)', '1016.38.0.1003'
+          or '008.0016.0000.0011') and garbled names and versions, which happened when HPE shifted the columns
+          of the Contents Report (seen in Gen12 and Gen10 reports). The columns are now located from the report header.
+        - Fixed a row split by a page break losing the end of its Category and Name (for example 'Driver - Storage
+          Fibre Channel and' instead of 'Driver - Storage Fibre Channel and Fibre Channel Over Ethernet').
+        - Fixed the connection failing after several runs with 'You have reached the maximum of 7 personal API
+          clients' by removing the API clients left by earlier runs when connecting.
 
     1.1.0 (2026-10-14)
         - Fixed filenames that wrap across two lines in the PDF, which were returned with a stray space
@@ -143,7 +187,10 @@ param(
     [string]$ExportPath,
 
     [Parameter()]
-    [switch]$PassThru
+    [switch]$PassThru,
+
+    [Parameter()]
+    [switch]$IncludeReleaseDate
 )
 
 $ErrorActionPreference = 'Stop'
@@ -156,7 +203,8 @@ if ($GLCredential -and $PasswordlessSSOEmail) {
 if (-not ($Global:HPEGreenLakeSession -and
         $Global:HPEGreenLakeSession.workspace -eq $Workspace -and
         $Global:HPEGreenLakeSession.IsValid)) {
-    $connectParameters = @{ Workspace = $Workspace }
+    # Clears API clients left by earlier runs, otherwise repeated runs hit the 7 personal API clients limit
+    $connectParameters = @{ Workspace = $Workspace; RemoveExistingCredentials = $true }
     if ($GLCredential) {
         $connectParameters.Credential = $GLCredential
     }
@@ -237,6 +285,9 @@ try {
     $document = [UglyToad.PdfPig.PdfDocument]::Open($pdfPath)
     $components = [System.Collections.ArrayList]::new()
 
+    # A token ending with this marker was not followed by a space in the PDF, so the next line continues the same word.
+    $noSpaceMarker = [string][char]0xE000
+
     # PDF line-wraps always break mid-token at a trailing hyphen (verified against real reports) - concatenate
     # those directly instead of inserting a space, so wrapped filenames/versions are reconstructed correctly.
     function Join-PdfWrappedText {
@@ -245,10 +296,57 @@ try {
         for ($i = 0; $i -lt $Tokens.Count; $i++) {
             if ($i -gt 0) {
                 $previous = $Tokens[$i - 1]
-                if (-not ($previous.Length -gt 1 -and $previous.EndsWith('-'))) {
+                $wrapsInsideWord = $previous.EndsWith($noSpaceMarker) -and $previous.TrimEnd($noSpaceMarker) -ne '-'
+                $endsWithHyphen = $previous.Length -gt 1 -and $previous.EndsWith('-')
+                if (-not ($wrapsInsideWord -or $endsWithHyphen)) {
                     [void]$sb.Append(' ')
                 }
             }
+            [void]$sb.Append($Tokens[$i].TrimEnd($noSpaceMarker))
+        }
+        return $sb.ToString()
+    }
+
+    # The PDF writes a space glyph after every word that ends a line normally, but none when a long word is cut mid-word.
+    function Add-PdfNoSpaceMarker {
+        param($Words, $SpaceKeys)
+        foreach ($word in $Words) {
+            $y = [int][Math]::Round($word.BoundingBox.Bottom)
+            $x = [int][Math]::Round($word.BoundingBox.Right)
+            $followedBySpace = $false
+            foreach ($dy in -1, 0, 1) {
+                foreach ($dx in -1, 0, 1) {
+                    if ($SpaceKeys.Contains(('{0}|{1}' -f ($y + $dy), ($x + $dx)))) { $followedBySpace = $true }
+                }
+            }
+            if ($followedBySpace) { $word.Text } else { $word.Text + $noSpaceMarker }
+        }
+    }
+
+    # A filename can wrap anywhere (at a hyphen, or in the middle of a word), so its pieces are joined directly
+    # and a new filename only starts once the previous one ends with a file extension.
+    function Join-PdfFilenames {
+        param([string[]]$Tokens)
+        $filenames = [System.Collections.ArrayList]::new()
+        $current = ''
+        foreach ($token in $Tokens) {
+            $current += $token
+            if ($current -match '\.(rpm|deb|exe|zip|fwpkg|vib|iso|bin|tgz|gz|msi|cab|sh)$') {
+                [void]$filenames.Add($current)
+                $current = ''
+            }
+        }
+        if ($current) { [void]$filenames.Add($current) }
+        return $filenames -join '; '
+    }
+
+    # A version never contains a space except before a suffix such as '(B)', so any other line wrap is a split
+    # inside the version (for example '1016.38.0.10' + '03').
+    function Join-PdfVersion {
+        param([string[]]$Tokens)
+        $sb = [System.Text.StringBuilder]::new()
+        for ($i = 0; $i -lt $Tokens.Count; $i++) {
+            if ($i -gt 0 -and $Tokens[$i].StartsWith('(')) { [void]$sb.Append(' ') }
             [void]$sb.Append($Tokens[$i])
         }
         return $sb.ToString()
@@ -258,8 +356,7 @@ try {
         param($Row)
         $category = (Join-PdfWrappedText -Tokens @($Row.Category)).Trim()
         $name = (Join-PdfWrappedText -Tokens @($Row.Name)).Trim()
-        # A remaining space after hyphen-aware joining means two distinct filenames were present in this row
-        $filename = (Join-PdfWrappedText -Tokens @($Row.Filename)).Trim() -replace '\s+', '; '
+        $filename = (Join-PdfFilenames -Tokens @($Row.Filename)).Trim()
         if (-not $filename -or $category -match 'Product Category' -or $name -eq 'Description') { return }
 
         [PSCustomObject]@{
@@ -267,7 +364,7 @@ try {
             ReleaseVersion     = $resolvedVersion
             Category           = $category
             Name               = $name
-            Version            = (Join-PdfWrappedText -Tokens @($Row.Version)).Trim()
+            Version            = (Join-PdfVersion -Tokens @($Row.Version)).Trim()
             Filename           = $filename
             UpgradeRequirement = (Join-PdfWrappedText -Tokens @($Row.UpgradeRequirement)).Trim()
             ReleaseStatus      = (Join-PdfWrappedText -Tokens @($Row.ReleaseStatus)).Trim()
@@ -277,10 +374,9 @@ try {
         }
     }
 
-    # The Upgrade Requirement / Filename / Release Status boundary is derived from the page's own header word
-    # positions instead of the fixed 530/740 pixel values: a wrapped filename's continuation text can render a
-    # few points left of the original fixed boundary, misclassifying it as Upgrade Requirement. The Category/Name/
-    # Version boundaries are left untouched since they already match the real layout.
+    # Column boundaries are derived from the header row of the first page because HPE shifts the columns between
+    # generations and releases (a wrapped filename can also render a few points left of a fixed boundary).
+    # The fixed values are only fallbacks when the header cannot be read.
     $dynamicHeaderLabels = @{
         'Upgrade'     = 'UpgradeRequirement'
         'Requirement' = 'UpgradeRequirement'
@@ -288,6 +384,10 @@ try {
         'Release'     = 'ReleaseStatus'
         'Status'      = 'ReleaseStatus'
     }
+    $categoryUpper = 100.0
+    $nameUpper = 250.0
+    $versionLower = 300.0
+    $versionUpper = 380.0
     $upgradeRequirementUpper = 530.0
     $filenameUpper = 740.0
     $dynamicBoundsResolved = $false
@@ -304,6 +404,13 @@ try {
             $headerBottom = ($headerWords | Measure-Object -Property { $_.BoundingBox.Bottom } -Minimum).Minimum
             if ($null -eq $headerBottom) { $headerBottom = [double]::PositiveInfinity }
 
+            $spaceKeys = [System.Collections.Generic.HashSet[string]]::new()
+            foreach ($letter in $page.Letters) {
+                if ($letter.Value -eq ' ') {
+                    [void]$spaceKeys.Add(('{0}|{1}' -f [int][Math]::Round($letter.StartBaseLine.Y), [int][Math]::Round($letter.StartBaseLine.X)))
+                }
+            }
+
             if (-not $dynamicBoundsResolved) {
                 $dynamicAnchors = @{}
                 foreach ($headerWord in $headerWords) {
@@ -316,8 +423,20 @@ try {
                     }
                 }
                 if ($dynamicAnchors.ContainsKey('UpgradeRequirement') -and $dynamicAnchors.ContainsKey('Filename') -and $dynamicAnchors.ContainsKey('ReleaseStatus')) {
+                    $versionUpper = $dynamicAnchors['UpgradeRequirement'] - 10
                     $upgradeRequirementUpper = ($dynamicAnchors['UpgradeRequirement'] + $dynamicAnchors['Filename']) / 2
                     $filenameUpper = ($dynamicAnchors['Filename'] + $dynamicAnchors['ReleaseStatus']) / 2
+
+                    # The '#' header sits above the build number column, which lies between the Name and Version columns
+                    $categoryHeader = $headerWords | Where-Object Text -eq 'Category' | Select-Object -First 1
+                    $buildHeader = if ($categoryHeader) {
+                        $words | Where-Object { $_.Text -eq '#' -and [Math]::Abs($_.BoundingBox.Bottom - $categoryHeader.BoundingBox.Bottom) -le 2.5 } | Select-Object -First 1
+                    }
+                    if ($categoryHeader -and $buildHeader) {
+                        $categoryUpper = $categoryHeader.BoundingBox.Right + 15
+                        $nameUpper = $buildHeader.BoundingBox.Left - 5
+                        $versionLower = $buildHeader.BoundingBox.Right + 5
+                    }
                     $dynamicBoundsResolved = $true
                 }
             }
@@ -352,20 +471,21 @@ try {
 
                 $row = [PSCustomObject]@{
                     PageNumber         = $page.Number
-                    Category           = @($orderedWords | Where-Object { $_.BoundingBox.Left -lt 100 } | ForEach-Object Text)
-                    Name               = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge 100 -and $_.BoundingBox.Left -lt 250 } | ForEach-Object Text)
-                    Version            = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge 300 -and $_.BoundingBox.Left -lt 380 } | ForEach-Object Text)
-                    UpgradeRequirement = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge 380 -and $_.BoundingBox.Left -lt $upgradeRequirementUpper } | ForEach-Object Text)
+                    Category           = @(Add-PdfNoSpaceMarker -Words @($orderedWords | Where-Object { $_.BoundingBox.Left -lt $categoryUpper }) -SpaceKeys $spaceKeys)
+                    Name               = @(Add-PdfNoSpaceMarker -Words @($orderedWords | Where-Object { $_.BoundingBox.Left -ge $categoryUpper -and $_.BoundingBox.Left -lt $nameUpper }) -SpaceKeys $spaceKeys)
+                    Version            = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge $versionLower -and $_.BoundingBox.Left -lt $versionUpper } | ForEach-Object Text)
+                    UpgradeRequirement = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge $versionUpper -and $_.BoundingBox.Left -lt $upgradeRequirementUpper } | ForEach-Object Text)
                     Filename           = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge $upgradeRequirementUpper -and $_.BoundingBox.Left -lt $filenameUpper } | ForEach-Object Text)
                     ReleaseStatus      = @($orderedWords | Where-Object { $_.BoundingBox.Left -ge $filenameUpper } | ForEach-Object Text)
                 }
 
                 $startsNewRow = $row.Category.Count -gt 0
-                $isContinuation = $isFirstRowOnPage -and $pendingRow -and -not $startsNewRow -and $row.Version.Count -eq 0
+                # Every real row has a version, so a first row on the page without one continues the previous page's row (its category can continue too)
+                $isContinuation = $isFirstRowOnPage -and $pendingRow -and $row.Version.Count -eq 0
                 $isFirstRowOnPage = $false
 
                 if ($isContinuation) {
-                    foreach ($column in 'Name', 'Version', 'UpgradeRequirement', 'Filename', 'ReleaseStatus') {
+                    foreach ($column in 'Category', 'Name', 'Version', 'UpgradeRequirement', 'Filename', 'ReleaseStatus') {
                         $pendingRow.$column = @($pendingRow.$column) + @($row.$column)
                     }
                 }
@@ -387,6 +507,118 @@ try {
     finally { $document.Dispose() }
 
     if ($components.Count -eq 0) { Write-Error 'No component rows were extracted from the Contents Report.' -ErrorAction Stop }
+
+    # ---- Step 5 - Add the release date of each component (optional) ----
+    if ($IncludeReleaseDate) {
+        $coveoTokenUri = 'https://support.hpe.com/km/api/generateCoveoSearchToken'
+        $coveoSearchUri = 'https://hewlettpackardproductioniwmg9b9w.org.coveo.com/rest/search/v2?organizationId=hewlettpackardproductioniwmg9b9w'
+        $collectionBaseUri = 'https://support.hpe.com/hpesc/public/api/software/swCollection'
+
+        try {
+            $coveoToken = (Invoke-RestMethod -Uri $coveoTokenUri -TimeoutSec 60 -ErrorAction Stop).token
+        }
+        catch {
+            $coveoToken = $null
+            Write-Warning "Release dates skipped: a search token could not be obtained from support.hpe.com. $($_.Exception.Message)"
+        }
+
+        if ($coveoToken) {
+            $dateLookups = @(foreach ($component in $components) {
+                    foreach ($file in ($component.Filename -split '; ')) {
+                        [PSCustomObject]@{ Key = "$file|$($component.Version)"; Filename = $file; Version = $component.Version }
+                    }
+                }) | Sort-Object Key -Unique
+            Write-Host "Looking up the release date of $($dateLookups.Count) component files on support.hpe.com (this can take several minutes)..." -ForegroundColor Cyan
+
+            # Each product collection is fetched once and shared by all lookups
+            $collectionCache = [System.Collections.Concurrent.ConcurrentDictionary[string, object]]::new()
+
+            $lookupResults = $dateLookups | ForEach-Object -ThrottleLimit 5 -Parallel {
+                $lookup = $_
+                $headers = @{ Authorization = "Bearer $($using:coveoToken)" }
+                $cache = $using:collectionCache
+                $result = [PSCustomObject]@{ Key = $lookup.Key; Date = $null; Reason = $null }
+
+                try {
+                    $searchBody = @{ q = $lookup.Filename; numberOfResults = 100 } | ConvertTo-Json
+                    $search = $null
+                    for ($attempt = 1; $attempt -le 3 -and -not $search; $attempt++) {
+                        try {
+                            # Hashtables are required: the search response has keys that differ only by case
+                            $search = (Invoke-WebRequest -Method Post -Uri $using:coveoSearchUri -Headers $headers -ContentType 'application/json' -Body $searchBody -TimeoutSec 60).Content | ConvertFrom-Json -AsHashtable
+                        }
+                        catch {
+                            if ($attempt -eq 3) { throw }
+                            Start-Sleep -Seconds (2 * $attempt)
+                        }
+                    }
+
+                    # Only a collection that lists this exact filename is trusted (the first search hit is often another product)
+                    $hit = @($search['results'] | Where-Object {
+                            $_['raw']['kmswcollectionid'] -and (("$($_['raw']['kmswitmfilenm'])" -split '\s+') -contains $lookup.Filename)
+                        })[0]
+                    if (-not $hit) {
+                        $result.Reason = 'Filename is not listed on support.hpe.com'
+                        return $result
+                    }
+
+                    $collectionId = [string]$hit['raw']['kmswcollectionid']
+                    if ($collectionId -notmatch '^[A-Za-z0-9_-]+$') {
+                        $result.Reason = 'Unexpected collection id'
+                        return $result
+                    }
+
+                    $collection = $null
+                    if (-not $cache.TryGetValue($collectionId, [ref]$collection)) {
+                        for ($attempt = 1; $attempt -le 3 -and -not $collection; $attempt++) {
+                            try {
+                                $collection = (Invoke-WebRequest -Uri "$($using:collectionBaseUri)/$collectionId" -TimeoutSec 60).Content | ConvertFrom-Json -AsHashtable
+                            }
+                            catch {
+                                if ($attempt -eq 3) { throw }
+                                Start-Sleep -Seconds (2 * $attempt)
+                            }
+                        }
+                        $cache[$collectionId] = $collection
+                    }
+
+                    $wantedVersion = $lookup.Version -replace '\s', ''
+                    $revision = @($collection['revisions'] | Where-Object { ([string]$_['version'] -replace '\s', '') -eq $wantedVersion })[0]
+                    if ($revision) { $result.Date = $revision['customer_available_date'] }
+                    else { $result.Reason = 'Version not found for this product on support.hpe.com' }
+                }
+                catch {
+                    $result.Reason = $_.Exception.Message
+                }
+                $result
+            }
+
+            $dateByKey = @{}
+            foreach ($lookupResult in $lookupResults) { $dateByKey[$lookupResult.Key] = $lookupResult }
+
+            $withDate = 0
+            foreach ($component in $components) {
+                $dates = foreach ($file in ($component.Filename -split '; ')) {
+                    $lookupResult = $dateByKey["$file|$($component.Version)"]
+                    $parsed = [datetime]::MinValue
+                    if ($lookupResult.Date -and [datetime]::TryParseExact([string]$lookupResult.Date, 'd MMM yyyy', [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$parsed)) {
+                        $parsed.ToString('yyyy-MM-dd')
+                    }
+                    elseif ($lookupResult.Date) { [string]$lookupResult.Date }
+                    else {
+                        Write-Verbose "No release date for '$file' version '$($component.Version)': $($lookupResult.Reason)"
+                        ''
+                    }
+                }
+                $releaseDate = if (($dates -join '').Length -gt 0) { $dates -join '; ' } else { $null }
+                if ($releaseDate) { $withDate++ }
+                Add-Member -InputObject $component -NotePropertyName ReleaseDate -NotePropertyValue $releaseDate
+            }
+
+            $components = [System.Collections.ArrayList]@($components | Select-Object Generation, ReleaseVersion, Category, Name, Version, Filename, UpgradeRequirement, ReleaseStatus, ReleaseDate, DocumentId, SourceUrl, PageNumber)
+            Write-Host "Release date found for $withDate of $($components.Count) components." -ForegroundColor Green
+        }
+    }
 
     if ($ExportPath) {
         $destination = $ExportPath
